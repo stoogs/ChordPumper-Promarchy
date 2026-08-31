@@ -20,7 +20,7 @@ Panel {
 
   property int keyRoot: 0
   property string scaleType: "major"
-  property string scaleLockMode: "off"
+  property string scaleLockMode: "nearest"
   property bool keyPickerOpen: false
   property int lastScaleShift: 0
   property int octave: 4
@@ -138,21 +138,25 @@ Panel {
     stopActiveNotes()
     keyRoot = value
     keyPickerOpen = false
+    if (scaleLockMode === "off") scaleLockMode = "nearest"
     rebuildProgression()
-    statusText = "Scale root · " + Model.pitchClassLabel(keyRoot) + " " + scaleType
+    statusText = "Scale locked · " + Model.pitchClassLabel(keyRoot) + " " + scaleType + " · " + scaleLockModeName()
   }
   function setScaleType(value) {
     stopActiveNotes()
     scaleType = value
-    statusText = "Scale · " + Model.pitchClassLabel(keyRoot) + " " + scaleType
+    if (scaleLockMode === "off") scaleLockMode = "nearest"
+    statusText = "Scale locked · " + Model.pitchClassLabel(keyRoot) + " " + scaleType + " · " + scaleLockModeName()
   }
   function setScaleLockMode(value) {
     stopActiveNotes()
     scaleLockMode = value
-    var label = value
+    statusText = "Scale lock · " + scaleLockModeName()
+  }
+  function scaleLockModeName() {
     for (var i = 0; i < scaleLockModes.length; i++)
-      if (scaleLockModes[i].id === value) label = scaleLockModes[i].name
-    statusText = "Scale lock · " + label
+      if (scaleLockModes[i].id === scaleLockMode) return scaleLockModes[i].name
+    return scaleLockMode
   }
   function scaleAllowed(midi) {
     return scaleLockMode === "off" || Model.isInScale(midi, keyRoot, scaleType)
@@ -398,7 +402,7 @@ Panel {
             width: parent.width - headerControls.width - Style.space(10)
             Text { text: "CHORDPUMPER PROMARCHY"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.title; font.bold: true }
             Text {
-              text: Model.pitchClassLabel(root.keyRoot) + " " + root.scaleType + " · " + root.currentStyle.name + " · 110 BPM"
+              text: Model.pitchClassLabel(root.keyRoot) + " " + root.scaleType + " · " + root.scaleLockModeName() + " · " + root.currentStyle.name + " · 110 BPM"
               color: Qt.darker(root.foreground, 1.4)
               font.family: root.fontFamily
               font.pixelSize: Style.font.bodySmall
@@ -521,6 +525,14 @@ Panel {
               onClicked: { root.setKeyRoot(modelData); keyArea.forceActiveFocus() }
             }
           }
+        }
+
+        Text {
+          visible: root.scaleLockMode !== "off"
+          text: "AVAILABLE TONES  ·  " + Model.scaleToneNames(root.keyRoot, root.scaleType).join("   ")
+          color: Qt.darker(root.foreground, 1.25)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
         }
 
         Text { text: root.currentStyle.name.toUpperCase() + " CHORDS  ·  hold 1–6 to play"; color: Qt.darker(root.foreground, 1.35); font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }

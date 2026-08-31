@@ -93,6 +93,8 @@ Every style defines both its six progression chords and eight chord-shape choice
 
 Choose any of the twelve chromatic roots using natural and combined sharp/flat labels, then select Major or natural Minor.
 
+Nearest Note is enabled initially. Selecting a root or scale type while locking is Off also enables Nearest Note, so changing the scale always has an immediate visible and audible result.
+
 | Mode | Behaviour |
 | --- | --- |
 | Off | Plays the requested notes without correction. |

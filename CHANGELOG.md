@@ -2,6 +2,12 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.1.1 — 2026-08-31
+
+- Enabled Nearest Note scale lock by default so scale selection has an immediate effect.
+- Made root and scale-type selection activate Nearest Note when locking was Off.
+- Added the active lock mode and available scale tones to the panel readout.
+
 ## 1.1.0 — 2026-08-31
 
 - Added twelve-root major/minor scale lock with nearest-note, nearest-chord, and strict behavior.

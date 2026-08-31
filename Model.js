@@ -21,6 +21,13 @@ function scaleSteps(scaleType) {
   return scaleType === "minor" ? MINOR_STEPS : MAJOR_STEPS
 }
 
+function scaleToneNames(root, scaleType) {
+  var steps = scaleSteps(scaleType)
+  var names = []
+  for (var i = 0; i < steps.length; i++) names.push(NOTE_NAMES[modulo(root + steps[i], 12)])
+  return names
+}
+
 function isInScale(note, root, scaleType) {
   return scaleSteps(scaleType).indexOf(modulo(note - root, 12)) !== -1
 }
