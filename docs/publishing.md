@@ -7,6 +7,7 @@
 - Namespaced ID: `io.github.stoogs.chordpumper-promarchy`
 - README, MIT license, changelog, and removal instructions
 - Dependencies and unsandboxed permission boundary documented
+- Pixel-faithful `preview.png` captured from the live Omarchy shell
 - No symlinks, SoundFonts, generated MIDI, saved projects, or bytecode
 
 ## Validate

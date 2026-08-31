@@ -2,6 +2,8 @@
 
 ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad for the Omarchy Quattro shell. It turns the Omarchy bar into a quick musical notebook: play a piano, voice chords from the home row, audition style-aware harmony, explore randomized palettes, and export MIDI.
 
+![ChordPumper Promarchy running in the Omarchy shell](preview.png)
+
 ## Features
 
 - Low-latency FluidSynth playback through PipeWire
@@ -57,6 +59,8 @@ Click the compact piano icon in the bar to open the instrument. Hover it to see 
 ### Style chords
 
 Hold `1` through `9`, or `0` for the tenth slot, to play the ten named progression chords supplied by the active style. The chord stops when the number key is released. Core mode preserves the original chords in slots `1–6`; slots `7–0` add four genre-specific colour voicings.
+
+The on-screen chord tiles are non-interactive key legends; use the corresponding physical number key to play each chord.
 
 The number row has four style-aware chord palettes:
 

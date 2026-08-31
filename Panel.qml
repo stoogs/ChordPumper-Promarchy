@@ -31,7 +31,6 @@ Panel {
   property bool scalePickerOpen: false
   property int lastScaleShift: 0
   property int octave: 4
-  property int selectedDegree: 0
   property string modifier: ""
   property string lockedModifier: ""
   property int temporaryModifierIndex: -1
@@ -103,10 +102,6 @@ Panel {
       return root.bar.switchPanelFrom(root.barIdentity, direction)
     return false
   }
-  function chooseDegree(index) {
-    selectedDegree = index
-    statusText = "Selected " + chords[index].roman + " · " + Model.chordDisplayName(chords[index].root, chords[index].quality)
-  }
   function modifierIndexForText(text) {
     return "cvbnm,./".indexOf(String(text).toLowerCase())
   }
@@ -138,7 +133,6 @@ Panel {
     lockedModifier = ""
     modifier = ""
     chordPaletteMode = "core"
-    selectedDegree = 0
     statusText = currentStyle.name + " style · palette loaded"
   }
   function cycleStyle() { applyStyle(styleIndex + 1) }
@@ -147,18 +141,15 @@ Panel {
     applyStyle(nextStyle)
     chordPaletteMode = "shuffle"
     chordPaletteSeed = Math.floor(Math.random() * 1000000) + 1
-    selectedDegree = Math.floor(Math.random() * chords.length)
     lockedModifier = modifiers[Math.floor(Math.random() * modifiers.length)]
     modifier = lockedModifier
     statusText = "Random · " + currentStyle.name + " · "
-      + Model.chordDisplayName(chords[selectedDegree].root, chords[selectedDegree].quality)
-      + " · " + Model.qualityDisplayName(lockedModifier) + " locked"
+      + chordPaletteName() + " palette · " + Model.qualityDisplayName(lockedModifier) + " locked"
   }
   function setChordPalette(mode) {
     stopActiveNotes()
     chordPaletteMode = mode
     if (mode === "shuffle") chordPaletteSeed = Math.floor(Math.random() * 1000000) + 1
-    selectedDegree = 0
     statusText = currentStyle.name + " · " + chordPaletteName() + " chord palette"
   }
   function chordPaletteName() {
@@ -675,12 +666,12 @@ Panel {
               required property int index
               width: (content.width - Style.space(24)) / 5
               text: (index === 9 ? "0" : String(index + 1)) + " · " + modelData.roman + "\n" + Model.chordDisplayName(modelData.root, modelData.quality)
-              selected: root.selectedDegree === index || root.activeDegreeIndex === index
+              selected: root.activeDegreeIndex === index
+              enabled: false
               bordered: true
               foreground: root.foreground
               fontFamily: root.fontFamily
               fontSize: Style.font.caption
-              onClicked: { root.chooseDegree(index); keyArea.forceActiveFocus() }
             }
           }
         }

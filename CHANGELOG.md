@@ -2,6 +2,12 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.6.3 — 2026-08-31
+
+- Added a pixel-faithful live marketplace preview.
+- Made the `1–0` chord tiles non-interactive so they no longer imply mouse selection or playback.
+- Removed the unused chord-selection state from whole-instrument randomization.
+
 ## 1.6.2 — 2026-08-31
 
 - Added a Clear MIDI control for starting a fresh take.
