@@ -7,7 +7,7 @@ ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad fo
 - Low-latency FluidSynth playback through PipeWire
 - One-octave computer-keyboard piano with mouse support
 - 24 musical style palettes
-- Six playable, style-aware progression chords
+- Ten playable, style-aware progression chords
 - Eight momentary or lockable chord shapes per style
 - Twelve selectable scales with note-snap, chord-snap, and strict modes
 - Recent-note history
@@ -57,7 +57,7 @@ Click **♪ Chords** in the bar to open the instrument.
 
 ### Style chords
 
-Hold `1` through `6` to play the six named progression chords supplied by the active style. The chord stops when the number key is released.
+Hold `1` through `9`, or `0` for the tenth slot, to play the ten named progression chords supplied by the active style. The chord stops when the number key is released. Core mode preserves the original chords in slots `1–6`; slots `7–0` add four genre-specific colour voicings.
 
 The number row has four style-aware chord palettes:
 
@@ -66,7 +66,7 @@ The number row has four style-aware chord palettes:
 | Core | The hand-authored default set for the genre. |
 | Alt | The same harmonic vocabulary in an alternate songwriting order. |
 | Colour | Keeps the style's roots but applies its characteristic extensions and voicings. |
-| Shuffle | Generates another six-slot palette from that genre's chord roots and chord-shape vocabulary. Click it repeatedly to reshuffle. |
+| Shuffle | Generates another ten-slot palette from that genre's chord roots and chord-shape vocabulary. Click it repeatedly to reshuffle. |
 
 The main **Random** button now selects a style-aware shuffled palette as part of randomizing the whole instrument.
 

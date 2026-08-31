@@ -2,6 +2,12 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.5.0 — 2026-08-31
+
+- Expanded the style chord row from six to ten playable slots mapped to `1–9` and `0`.
+- Preserved each Core palette's original `1–6` mapping and added four genre-specific colour chords on `7–0`.
+- Expanded Alternate, Colour, and Shuffle modes across all ten chord slots.
+
 ## 1.4.0 — 2026-08-31
 
 - Added Core, Alternate, Colour, and repeatable Shuffle palettes for the `1–6` chord row.

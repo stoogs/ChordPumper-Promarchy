@@ -27,7 +27,7 @@ Then verify:
 - Physical and mouse note-on/note-off
 - No stuck notes after closing the panel
 - All 24 style choices
-- `1–6` chord playback
+- `1–9` and `0` chord playback
 - Core, Alternate, Colour, and repeated Shuffle chord palettes for every style
 - Momentary and locked chord shapes
 - All scale roots, all twelve scale types, and all four scale-lock modes

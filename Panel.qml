@@ -249,6 +249,11 @@ Panel {
       parts.push(Model.asciiNoteName(progression[i].root) + ":" + progression[i].quality)
     return parts.join(",")
   }
+  function numberChordIndex(key) {
+    if (key >= Qt.Key_1 && key <= Qt.Key_9) return key - Qt.Key_1
+    if (key === Qt.Key_0) return 9
+    return -1
+  }
   function handlePress(event) {
     if (event.isAutoRepeat) { event.accepted = true; return }
     if (event.key === Qt.Key_Escape) { close(); event.accepted = true; return }
@@ -257,8 +262,9 @@ Panel {
     if (event.text === "<") {
       cycleStyle(); event.accepted = true; return
     }
-    if (event.key >= Qt.Key_1 && event.key <= Qt.Key_6) {
-      pressDegree(event.key - Qt.Key_1); event.accepted = true; return
+    var chordIndex = numberChordIndex(event.key)
+    if (chordIndex >= 0) {
+      pressDegree(chordIndex); event.accepted = true; return
     }
     var modifierIndex = modifierIndexForText(event.text)
     if (modifierIndex >= 0) {
@@ -273,8 +279,9 @@ Panel {
   function handleRelease(event) {
     if (event.isAutoRepeat) { event.accepted = true; return }
     if (event.text === "<") { event.accepted = true; return }
-    if (event.key >= Qt.Key_1 && event.key <= Qt.Key_6) {
-      releaseDegree(event.key - Qt.Key_1); event.accepted = true; return
+    var chordIndex = numberChordIndex(event.key)
+    if (chordIndex >= 0) {
+      releaseDegree(chordIndex); event.accepted = true; return
     }
     var modifierIndex = modifierIndexForText(event.text)
     if (modifierIndex >= 0) {
@@ -614,7 +621,7 @@ Panel {
           spacing: Style.space(5)
           Text {
             width: parent.width - paletteControls.width - Style.space(5)
-            text: root.currentStyle.name.toUpperCase() + " CHORDS  ·  hold 1–6 to play"
+            text: root.currentStyle.name.toUpperCase() + " CHORDS  ·  hold 1–9 / 0 to play"
             color: Qt.darker(root.foreground, 1.35)
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -643,15 +650,15 @@ Panel {
           }
         }
         Grid {
-          columns: 6
+          columns: 5
           spacing: Style.space(6)
           Repeater {
             model: root.chords
             Button {
               required property var modelData
               required property int index
-              width: (content.width - Style.space(30)) / 6
-              text: (index + 1) + " · " + modelData.roman + "\n" + Model.chordDisplayName(modelData.root, modelData.quality)
+              width: (content.width - Style.space(24)) / 5
+              text: (index === 9 ? "0" : String(index + 1)) + " · " + modelData.roman + "\n" + Model.chordDisplayName(modelData.root, modelData.quality)
               selected: root.selectedDegree === index || root.activeDegreeIndex === index
               bordered: true
               foreground: root.foreground

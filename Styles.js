@@ -71,9 +71,15 @@ function seededValue(seed) {
 function paletteSource(index, variation, seed) {
   var presetValue = at(index)
   var source = presetValue.chords
-  if (variation === "core" || !variation) return source
+  var expanded = source.slice()
+  var extraRoots = [0, 3, 1, 4]
+  for (var extra = 0; extra < extraRoots.length; extra++) {
+    var baseChord = source[extraRoots[extra]]
+    expanded.push([baseChord[0], presetValue.shapes[(extra + 2) % presetValue.shapes.length], baseChord[2]])
+  }
+  if (variation === "core" || !variation) return expanded
 
-  var order = variation === "alt" ? [0, 3, 1, 4, 2, 5] : [0, 1, 2, 3, 4, 5]
+  var order = variation === "alt" ? [0, 3, 1, 4, 2, 5, 6, 8, 7, 9] : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
   if (variation === "shuffle") {
     for (var position = order.length - 1; position > 0; position--) {
       var swapWith = Math.floor(seededValue(seed + position * 17) * (position + 1))
@@ -83,9 +89,9 @@ function paletteSource(index, variation, seed) {
     }
   }
   var result = []
-  for (var i = 0; i < 6; i++) {
+  for (var i = 0; i < 10; i++) {
     var sourceIndex = order[i]
-    var chord = source[sourceIndex]
+    var chord = expanded[sourceIndex]
     var quality = chord[1]
     if (variation === "colour") quality = presetValue.shapes[(i + 2) % presetValue.shapes.length]
     if (variation === "shuffle" && seededValue(seed + i * 31) > 0.38)
