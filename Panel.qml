@@ -28,6 +28,7 @@ Panel {
   property string scaleType: "major"
   property string scaleLockMode: "nearest"
   property bool keyPickerOpen: false
+  property bool scalePickerOpen: false
   property int lastScaleShift: 0
   property int octave: 4
   property int selectedDegree: 0
@@ -50,6 +51,20 @@ Panel {
   readonly property var modifiers: currentStyle.shapes
   readonly property var modifierKeys: ["C", "V", "B", "N", "M", ",", ".", "/"]
   readonly property var scaleRoots: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+  readonly property var scaleTypes: [
+    { id: "major", name: "Major" },
+    { id: "minor", name: "Natural Minor" },
+    { id: "harmonicMinor", name: "Harmonic Minor" },
+    { id: "melodicMinor", name: "Melodic Minor" },
+    { id: "majorPentatonic", name: "Major Pentatonic" },
+    { id: "minorPentatonic", name: "Minor Pentatonic" },
+    { id: "blues", name: "Blues" },
+    { id: "dorian", name: "Dorian" },
+    { id: "phrygian", name: "Phrygian" },
+    { id: "lydian", name: "Lydian" },
+    { id: "mixolydian", name: "Mixolydian" },
+    { id: "locrian", name: "Locrian" }
+  ]
   readonly property var scaleLockModes: [
     { id: "off", name: "Off" },
     { id: "nearest", name: "Note Snap" },
@@ -145,15 +160,22 @@ Panel {
     stopActiveNotes()
     keyRoot = value
     keyPickerOpen = false
+    scalePickerOpen = false
     if (scaleLockMode === "off") scaleLockMode = "nearest"
     rebuildProgression()
-    statusText = "Scale locked · " + Model.pitchClassLabel(keyRoot) + " " + scaleType + " · " + scaleLockModeName()
+    statusText = "Scale locked · " + Model.pitchClassLabel(keyRoot) + " " + scaleTypeName() + " · " + scaleLockModeName()
   }
   function setScaleType(value) {
     stopActiveNotes()
     scaleType = value
+    scalePickerOpen = false
     if (scaleLockMode === "off") scaleLockMode = "nearest"
-    statusText = "Scale locked · " + Model.pitchClassLabel(keyRoot) + " " + scaleType + " · " + scaleLockModeName()
+    statusText = "Scale locked · " + Model.pitchClassLabel(keyRoot) + " " + scaleTypeName() + " · " + scaleLockModeName()
+  }
+  function scaleTypeName() {
+    for (var i = 0; i < scaleTypes.length; i++)
+      if (scaleTypes[i].id === scaleType) return scaleTypes[i].name
+    return scaleType
   }
   function setScaleLockMode(value) {
     stopActiveNotes()
@@ -416,7 +438,7 @@ Panel {
             width: parent.width - headerControls.width - Style.space(10)
             Text { text: "CHORDPUMPER PROMARCHY"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.title; font.bold: true }
             Text {
-              text: Model.pitchClassLabel(root.keyRoot) + " " + root.scaleType + " · " + root.scaleLockModeName() + " · " + root.currentStyle.name + " · 110 BPM"
+              text: Model.pitchClassLabel(root.keyRoot) + " " + root.scaleTypeName() + " · " + root.scaleLockModeName() + " · " + root.currentStyle.name + " · 110 BPM"
               color: Qt.darker(root.foreground, 1.4)
               font.family: root.fontFamily
               font.pixelSize: Style.font.bodySmall
@@ -488,23 +510,21 @@ Panel {
             bordered: true
             foreground: root.foreground
             fontFamily: root.fontFamily
-            onClicked: root.keyPickerOpen = !root.keyPickerOpen
+            onClicked: {
+              root.keyPickerOpen = !root.keyPickerOpen
+              if (root.keyPickerOpen) root.scalePickerOpen = false
+            }
           }
           Button {
-            text: "Major"
-            selected: root.scaleType === "major"
+            text: root.scaleTypeName() + "  ▾"
+            selected: root.scalePickerOpen
             bordered: true
             foreground: root.foreground
             fontFamily: root.fontFamily
-            onClicked: { root.setScaleType("major"); keyArea.forceActiveFocus() }
-          }
-          Button {
-            text: "Minor"
-            selected: root.scaleType === "minor"
-            bordered: true
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onClicked: { root.setScaleType("minor"); keyArea.forceActiveFocus() }
+            onClicked: {
+              root.scalePickerOpen = !root.scalePickerOpen
+              if (root.scalePickerOpen) root.keyPickerOpen = false
+            }
           }
           Repeater {
             model: root.scaleLockModes
@@ -537,6 +557,26 @@ Panel {
               fontFamily: root.fontFamily
               fontSize: Style.font.bodySmall
               onClicked: { root.setKeyRoot(modelData); keyArea.forceActiveFocus() }
+            }
+          }
+        }
+
+        Grid {
+          visible: root.scalePickerOpen
+          columns: 4
+          spacing: Style.space(5)
+          Repeater {
+            model: root.scaleTypes
+            Button {
+              required property var modelData
+              width: (content.width - Style.space(15)) / 4
+              text: modelData.name
+              selected: root.scaleType === modelData.id
+              bordered: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              onClicked: { root.setScaleType(modelData.id); keyArea.forceActiveFocus() }
             }
           }
         }
@@ -700,7 +740,7 @@ Panel {
                 : root.activeMidi === midi ? root.pianoPressed
                 : sounding ? Style.selectedStateColor(root.foreground, Color.accent, Color.urgent)
                 : scaleTone ? root.pianoBlack
-                : Qt.rgba(root.pianoMuted.r, root.pianoMuted.g, root.pianoMuted.b, 0.58)
+                : Qt.darker(root.pianoMuted, 1.45)
               border.width: 1
               border.color: adjusted || root.activeMidi === midi ? root.foreground : Color.popups.border
               radius: Style.space(3)

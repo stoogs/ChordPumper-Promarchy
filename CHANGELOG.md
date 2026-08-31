@@ -2,6 +2,12 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.3.0 — 2026-08-31
+
+- Added a compact 4×3 selector with twelve scales, including pentatonic, blues, minor variants, and all seven diatonic modes.
+- Extended scale highlighting and every lock mode to all selectable scales.
+- Made dimmed black keys opaque so white-key divider lines cannot show through them.
+
 ## 1.2.0 — 2026-08-31
 
 - Renamed Nearest Note and Nearest Chord to the clearer Note Snap and Chord Snap.

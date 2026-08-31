@@ -164,7 +164,11 @@ def main() -> int:
     parser.add_argument("--tempo", type=int, default=110)
     parser.add_argument("--progression", default="C:maj,A:min,F:maj,G:maj")
     parser.add_argument("--key", choices=tuple(NOTE_OFFSETS), default="C")
-    parser.add_argument("--scale", choices=("major", "minor"), default="major")
+    parser.add_argument("--scale", choices=(
+        "major", "minor", "harmonicMinor", "melodicMinor",
+        "majorPentatonic", "minorPentatonic", "blues", "dorian",
+        "phrygian", "lydian", "mixolydian", "locrian",
+    ), default="major")
     args = parser.parse_args()
 
     if args.action == "serve":

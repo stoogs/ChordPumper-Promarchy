@@ -9,7 +9,7 @@ ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad fo
 - 24 musical style palettes
 - Six playable, style-aware progression chords
 - Eight momentary or lockable chord shapes per style
-- Major/minor scale lock with note-snap, chord-snap, and strict modes
+- Twelve selectable scales with note-snap, chord-snap, and strict modes
 - Recent-note history
 - JSON project saving
 - Standard MIDI file export
@@ -91,7 +91,13 @@ Every style defines both its six progression chords and eight chord-shape choice
 
 ### Scale lock
 
-Choose any of the twelve chromatic roots using natural and combined sharp/flat labels, then select Major or natural Minor.
+Choose any of the twelve chromatic roots using natural and combined sharp/flat labels, then select a scale from the 4×3 palette.
+
+| | | | |
+| --- | --- | --- | --- |
+| Major | Natural Minor | Harmonic Minor | Melodic Minor |
+| Major Pentatonic | Minor Pentatonic | Blues | Dorian |
+| Phrygian | Lydian | Mixolydian | Locrian |
 
 Note Snap is enabled initially. Selecting a root or scale type while locking is Off also enables Note Snap, so changing the scale always has an immediate visible and audible result.
 

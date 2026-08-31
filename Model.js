@@ -5,6 +5,20 @@ var MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11]
 var MAJOR_QUALITIES = ["maj", "min", "min", "maj", "maj", "min", "dim"]
 var ROMAN = ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
 var MINOR_STEPS = [0, 2, 3, 5, 7, 8, 10]
+var SCALE_STEPS = {
+  "major": [0, 2, 4, 5, 7, 9, 11],
+  "minor": [0, 2, 3, 5, 7, 8, 10],
+  "harmonicMinor": [0, 2, 3, 5, 7, 8, 11],
+  "melodicMinor": [0, 2, 3, 5, 7, 9, 11],
+  "majorPentatonic": [0, 2, 4, 7, 9],
+  "minorPentatonic": [0, 3, 5, 7, 10],
+  "blues": [0, 3, 5, 6, 7, 10],
+  "dorian": [0, 2, 3, 5, 7, 9, 10],
+  "phrygian": [0, 1, 3, 5, 7, 8, 10],
+  "lydian": [0, 2, 4, 6, 7, 9, 11],
+  "mixolydian": [0, 2, 4, 5, 7, 9, 10],
+  "locrian": [0, 1, 3, 5, 6, 8, 10]
+}
 var PITCH_CLASS_LABELS = ["C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B"]
 
 function modulo(value, base) { return ((value % base) + base) % base }
@@ -18,7 +32,7 @@ function pitchClassLabel(value) {
 }
 
 function scaleSteps(scaleType) {
-  return scaleType === "minor" ? MINOR_STEPS : MAJOR_STEPS
+  return SCALE_STEPS[scaleType] || SCALE_STEPS.major
 }
 
 function scaleToneNames(root, scaleType) {

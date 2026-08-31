@@ -29,7 +29,7 @@ Then verify:
 - All 24 style choices
 - `1–6` chord playback
 - Momentary and locked chord shapes
-- All scale roots, both scale types, and all four scale-lock modes
+- All scale roots, all twelve scale types, and all four scale-lock modes
 - Requested keys use the accent color and snapped destination notes use the urgent color
 - Piano colors update correctly when the active Omarchy theme changes
 - Style cycling with `<`
