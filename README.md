@@ -59,6 +59,17 @@ Click **♪ Chords** in the bar to open the instrument.
 
 Hold `1` through `6` to play the six named progression chords supplied by the active style. The chord stops when the number key is released.
 
+The number row has four style-aware chord palettes:
+
+| Palette | Behaviour |
+| --- | --- |
+| Core | The hand-authored default set for the genre. |
+| Alt | The same harmonic vocabulary in an alternate songwriting order. |
+| Colour | Keeps the style's roots but applies its characteristic extensions and voicings. |
+| Shuffle | Generates another six-slot palette from that genre's chord roots and chord-shape vocabulary. Click it repeatedly to reshuffle. |
+
+The main **Random** button now selects a style-aware shuffled palette as part of randomizing the whole instrument.
+
 ### Chord shapes
 
 The eight visible shapes map left-to-right to:

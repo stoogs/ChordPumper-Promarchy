@@ -43,9 +43,11 @@ Panel {
   property bool audioReady: false
   property int styleIndex: 0
   property bool stylePickerOpen: false
+  property string chordPaletteMode: "core"
+  property int chordPaletteSeed: 1
   readonly property var styles: Styles.all()
   readonly property var currentStyle: Styles.at(styleIndex)
-  readonly property var chords: Styles.chordsFor(styleIndex, keyRoot)
+  readonly property var chords: Styles.chordsFor(styleIndex, keyRoot, chordPaletteMode, chordPaletteSeed)
   property var progression: []
   property string statusText: "Keyboard ready · audio engine is the next milestone"
   readonly property var modifiers: currentStyle.shapes
@@ -128,7 +130,7 @@ Panel {
       : "Modifier unlocked · piano returned to single notes"
   }
   function rebuildProgression() {
-    var pool = Styles.chordsFor(styleIndex, keyRoot)
+    var pool = chords
     var next = []
     var order = [0, 2, 3, 1]
     for (var j = 0; j < order.length; j++) next.push(pool[order[j] % pool.length])
@@ -141,6 +143,7 @@ Panel {
     temporaryModifierIndex = -1
     lockedModifier = ""
     modifier = ""
+    chordPaletteMode = "core"
     rebuildProgression()
     selectedDegree = 0
     statusText = currentStyle.name + " style · palette loaded"
@@ -149,12 +152,29 @@ Panel {
   function randomizeAll() {
     var nextStyle = Math.floor(Math.random() * styles.length)
     applyStyle(nextStyle)
+    chordPaletteMode = "shuffle"
+    chordPaletteSeed = Math.floor(Math.random() * 1000000) + 1
+    rebuildProgression()
     selectedDegree = Math.floor(Math.random() * chords.length)
     lockedModifier = modifiers[Math.floor(Math.random() * modifiers.length)]
     modifier = lockedModifier
     statusText = "Random · " + currentStyle.name + " · "
       + Model.chordDisplayName(chords[selectedDegree].root, chords[selectedDegree].quality)
       + " · " + Model.qualityDisplayName(lockedModifier) + " locked"
+  }
+  function setChordPalette(mode) {
+    stopActiveNotes()
+    chordPaletteMode = mode
+    if (mode === "shuffle") chordPaletteSeed = Math.floor(Math.random() * 1000000) + 1
+    selectedDegree = 0
+    rebuildProgression()
+    statusText = currentStyle.name + " · " + chordPaletteName() + " chord palette"
+  }
+  function chordPaletteName() {
+    if (chordPaletteMode === "alt") return "Alternate"
+    if (chordPaletteMode === "colour") return "Colour"
+    if (chordPaletteMode === "shuffle") return "Shuffle"
+    return "Core"
   }
   function setKeyRoot(value) {
     stopActiveNotes()
@@ -589,7 +609,39 @@ Panel {
           font.pixelSize: Style.font.caption
         }
 
-        Text { text: root.currentStyle.name.toUpperCase() + " CHORDS  ·  hold 1–6 to play"; color: Qt.darker(root.foreground, 1.35); font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+        Row {
+          width: parent.width
+          spacing: Style.space(5)
+          Text {
+            width: parent.width - paletteControls.width - Style.space(5)
+            text: root.currentStyle.name.toUpperCase() + " CHORDS  ·  hold 1–6 to play"
+            color: Qt.darker(root.foreground, 1.35)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            anchors.verticalCenter: parent.verticalCenter
+          }
+          Row {
+            id: paletteControls
+            spacing: Style.space(4)
+            Repeater {
+              model: [
+                { id: "core", name: "Core" }, { id: "alt", name: "Alt" },
+                { id: "colour", name: "Colour" }, { id: "shuffle", name: "Shuffle ↻" }
+              ]
+              Button {
+                required property var modelData
+                text: modelData.name
+                selected: root.chordPaletteMode === modelData.id
+                bordered: true
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                onClicked: { root.setChordPalette(modelData.id); keyArea.forceActiveFocus() }
+              }
+            }
+          }
+        }
         Grid {
           columns: 6
           spacing: Style.space(6)

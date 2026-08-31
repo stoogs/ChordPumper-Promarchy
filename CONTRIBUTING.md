@@ -28,6 +28,7 @@ Then verify:
 - No stuck notes after closing the panel
 - All 24 style choices
 - `1–6` chord playback
+- Core, Alternate, Colour, and repeated Shuffle chord palettes for every style
 - Momentary and locked chord shapes
 - All scale roots, all twelve scale types, and all four scale-lock modes
 - Requested keys use the accent color and snapped destination notes use the urgent color

@@ -2,6 +2,12 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.4.0 — 2026-08-31
+
+- Added Core, Alternate, Colour, and repeatable Shuffle palettes for the `1–6` chord row.
+- Kept generated chords constrained to each style's authored roots and chord vocabulary.
+- Included a shuffled chord palette in whole-instrument randomization.
+
 ## 1.3.0 — 2026-08-31
 
 - Added a compact 4×3 selector with twelve scales, including pentatonic, blues, minor variants, and all seven diatonic modes.

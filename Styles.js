@@ -63,8 +63,40 @@ function at(index) {
   return PRESETS[normalized]
 }
 
-function chordsFor(index, keyRoot) {
-  var source = at(index).chords
+function seededValue(seed) {
+  var value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453
+  return value - Math.floor(value)
+}
+
+function paletteSource(index, variation, seed) {
+  var presetValue = at(index)
+  var source = presetValue.chords
+  if (variation === "core" || !variation) return source
+
+  var order = variation === "alt" ? [0, 3, 1, 4, 2, 5] : [0, 1, 2, 3, 4, 5]
+  if (variation === "shuffle") {
+    for (var position = order.length - 1; position > 0; position--) {
+      var swapWith = Math.floor(seededValue(seed + position * 17) * (position + 1))
+      var held = order[position]
+      order[position] = order[swapWith]
+      order[swapWith] = held
+    }
+  }
+  var result = []
+  for (var i = 0; i < 6; i++) {
+    var sourceIndex = order[i]
+    var chord = source[sourceIndex]
+    var quality = chord[1]
+    if (variation === "colour") quality = presetValue.shapes[(i + 2) % presetValue.shapes.length]
+    if (variation === "shuffle" && seededValue(seed + i * 31) > 0.38)
+      quality = presetValue.shapes[Math.floor(seededValue(seed + i * 47) * presetValue.shapes.length)]
+    result.push([chord[0], quality, chord[2]])
+  }
+  return result
+}
+
+function chordsFor(index, keyRoot, variation, seed) {
+  var source = paletteSource(index, variation || "core", seed || 1)
   var result = []
   for (var i = 0; i < source.length; i++) {
     result.push({ root: ((keyRoot + source[i][0]) % 12 + 12) % 12,
