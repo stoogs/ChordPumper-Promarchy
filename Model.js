@@ -4,11 +4,61 @@ var NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", 
 var MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11]
 var MAJOR_QUALITIES = ["maj", "min", "min", "maj", "maj", "min", "dim"]
 var ROMAN = ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
+var MINOR_STEPS = [0, 2, 3, 5, 7, 8, 10]
+var PITCH_CLASS_LABELS = ["C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B"]
 
 function modulo(value, base) { return ((value % base) + base) % base }
 
 function noteName(midi) {
   return NOTE_NAMES[modulo(midi, 12)] + (Math.floor(midi / 12) - 1)
+}
+
+function pitchClassLabel(value) {
+  return PITCH_CLASS_LABELS[modulo(value, 12)]
+}
+
+function scaleSteps(scaleType) {
+  return scaleType === "minor" ? MINOR_STEPS : MAJOR_STEPS
+}
+
+function isInScale(note, root, scaleType) {
+  return scaleSteps(scaleType).indexOf(modulo(note - root, 12)) !== -1
+}
+
+function nearestScaleNote(note, root, scaleType) {
+  if (isInScale(note, root, scaleType)) return note
+  for (var distance = 1; distance <= 6; distance++) {
+    if (isInScale(note - distance, root, scaleType)) return note - distance
+    if (isInScale(note + distance, root, scaleType)) return note + distance
+  }
+  return note
+}
+
+function fitChordToScale(notes, root, scaleType) {
+  var bestShift = 0
+  var bestMatches = -1
+  var bestDistance = 99
+  for (var shift = -6; shift <= 6; shift++) {
+    var matches = 0
+    for (var i = 0; i < notes.length; i++)
+      if (isInScale(notes[i] + shift, root, scaleType)) matches++
+    var distance = Math.abs(shift)
+    if (matches > bestMatches || (matches === bestMatches && distance < bestDistance)) {
+      bestShift = shift
+      bestMatches = matches
+      bestDistance = distance
+    }
+  }
+  var fitted = []
+  for (var j = 0; j < notes.length; j++) fitted.push(notes[j] + bestShift)
+  return { notes: fitted, shift: bestShift, matches: bestMatches }
+}
+
+function uniqueNotes(notes) {
+  var result = []
+  for (var i = 0; i < notes.length; i++)
+    if (result.indexOf(notes[i]) === -1) result.push(notes[i])
+  return result
 }
 
 function chordName(root, quality) {

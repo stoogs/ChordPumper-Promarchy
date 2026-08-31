@@ -9,6 +9,7 @@ ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad fo
 - 24 musical style palettes
 - Six playable, style-aware progression chords
 - Eight momentary or lockable chord shapes per style
+- Major/minor scale lock with nearest-note, nearest-chord, and strict modes
 - Recent-note history
 - JSON project saving
 - Standard MIDI file export
@@ -87,6 +88,19 @@ Included styles:
 | Bossa Nova | Gospel | Reggae | Classical |
 
 Every style defines both its six progression chords and eight chord-shape choices. The interface uses compact, familiar theory labels such as `Dom 7`, `Sus 4`, and `Dim 7` where full descriptions would obscure the controls.
+
+### Scale lock
+
+Choose any of the twelve chromatic roots using natural and combined sharp/flat labels, then select Major or natural Minor.
+
+| Mode | Behaviour |
+| --- | --- |
+| Off | Plays the requested notes without correction. |
+| Nearest Note | Moves each out-of-scale tone to its nearest scale tone. |
+| Nearest Chord | Transposes a complete voicing by the smallest useful amount to maximize its scale fit. |
+| Strict | Rejects the complete note or chord if any tone is outside the selected scale. |
+
+When scale lock is active, available piano keys remain bright and unavailable keys are dimmed.
 
 ## Random, Save, and MIDI
 

@@ -19,6 +19,10 @@ Panel {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   property int keyRoot: 0
+  property string scaleType: "major"
+  property string scaleLockMode: "off"
+  property bool keyPickerOpen: false
+  property int lastScaleShift: 0
   property int octave: 4
   property int selectedDegree: 0
   property string modifier: ""
@@ -38,6 +42,13 @@ Panel {
   property string statusText: "Keyboard ready · audio engine is the next milestone"
   readonly property var modifiers: currentStyle.shapes
   readonly property var modifierKeys: ["C", "V", "B", "N", "M", ",", ".", "/"]
+  readonly property var scaleRoots: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+  readonly property var scaleLockModes: [
+    { id: "off", name: "Off" },
+    { id: "nearest", name: "Nearest Note" },
+    { id: "fit", name: "Nearest Chord" },
+    { id: "strict", name: "Strict" }
+  ]
   readonly property var whiteKeys: [
     { letter: "A", offset: 0 }, { letter: "S", offset: 2 },
     { letter: "D", offset: 4 }, { letter: "F", offset: 5 },
@@ -94,6 +105,13 @@ Panel {
       ? "Locked " + Model.qualityDisplayName(lockedModifier) + " · every piano key now voices a chord"
       : "Modifier unlocked · piano returned to single notes"
   }
+  function rebuildProgression() {
+    var pool = Styles.chordsFor(styleIndex, keyRoot)
+    var next = []
+    var order = [0, 2, 3, 1]
+    for (var j = 0; j < order.length; j++) next.push(pool[order[j] % pool.length])
+    progression = next
+  }
   function applyStyle(index) {
     stopActiveNotes()
     styleIndex = ((index % styles.length) + styles.length) % styles.length
@@ -101,11 +119,7 @@ Panel {
     temporaryModifierIndex = -1
     lockedModifier = ""
     modifier = ""
-    var pool = Styles.chordsFor(styleIndex, keyRoot)
-    var next = []
-    var order = [0, 2, 3, 1]
-    for (var j = 0; j < order.length; j++) next.push(pool[order[j] % pool.length])
-    progression = next
+    rebuildProgression()
     selectedDegree = 0
     statusText = currentStyle.name + " style · palette loaded"
   }
@@ -119,6 +133,49 @@ Panel {
     statusText = "Random · " + currentStyle.name + " · "
       + Model.chordDisplayName(chords[selectedDegree].root, chords[selectedDegree].quality)
       + " · " + Model.qualityDisplayName(lockedModifier) + " locked"
+  }
+  function setKeyRoot(value) {
+    stopActiveNotes()
+    keyRoot = value
+    keyPickerOpen = false
+    rebuildProgression()
+    statusText = "Scale root · " + Model.pitchClassLabel(keyRoot) + " " + scaleType
+  }
+  function setScaleType(value) {
+    stopActiveNotes()
+    scaleType = value
+    statusText = "Scale · " + Model.pitchClassLabel(keyRoot) + " " + scaleType
+  }
+  function setScaleLockMode(value) {
+    stopActiveNotes()
+    scaleLockMode = value
+    var label = value
+    for (var i = 0; i < scaleLockModes.length; i++)
+      if (scaleLockModes[i].id === value) label = scaleLockModes[i].name
+    statusText = "Scale lock · " + label
+  }
+  function scaleAllowed(midi) {
+    return scaleLockMode === "off" || Model.isInScale(midi, keyRoot, scaleType)
+  }
+  function resolveScaleNotes(notes) {
+    lastScaleShift = 0
+    if (scaleLockMode === "off") return notes.slice()
+    if (scaleLockMode === "strict") {
+      for (var i = 0; i < notes.length; i++)
+        if (!Model.isInScale(notes[i], keyRoot, scaleType)) return []
+      return notes.slice()
+    }
+    if (scaleLockMode === "nearest") {
+      var snapped = []
+      for (var j = 0; j < notes.length; j++)
+        snapped.push(Model.nearestScaleNote(notes[j], keyRoot, scaleType))
+      return Model.uniqueNotes(snapped)
+    }
+    if (notes.length === 1)
+      return [Model.nearestScaleNote(notes[0], keyRoot, scaleType)]
+    var fitted = Model.fitChordToScale(notes, keyRoot, scaleType)
+    lastScaleShift = fitted.shift
+    return fitted.notes
   }
   function styleSuggestionText() {
     var names = []
@@ -168,22 +225,34 @@ Panel {
 
   function pressMidi(midi) {
     stopActiveNotes()
-    activeMidi = midi
-    var notes = [midi]
+    var rawNotes = [midi]
     if (modifier !== "") {
       var intervals = Model.intervalsFor(modifier)
-      notes = []
+      rawNotes = []
       for (var intervalIndex = 0; intervalIndex < intervals.length; intervalIndex++)
-        notes.push(midi + intervals[intervalIndex])
+        rawNotes.push(midi + intervals[intervalIndex])
     }
+    var notes = resolveScaleNotes(rawNotes)
+    if (notes.length === 0) {
+      statusText = "Strict lock blocked " + (modifier !== ""
+        ? Model.noteClassName(midi) + " " + Model.qualityDisplayName(modifier)
+        : Model.noteName(midi))
+      keyArea.forceActiveFocus()
+      return
+    }
+    activeMidi = midi
     activeChordNotes = notes
-    recordHistory(modifier !== ""
-      ? Model.noteClassName(midi) + " " + Model.qualityDisplayName(modifier)
-      : Model.noteName(midi))
+    var historyLabel = Model.noteName(notes[0])
+    if (modifier !== "") {
+      var playedRoot = scaleLockMode === "fit" ? midi + lastScaleShift : midi
+      historyLabel = Model.noteClassName(playedRoot) + " " + Model.qualityDisplayName(modifier)
+      if (scaleLockMode === "nearest") historyLabel += " · Fit"
+    }
+    recordHistory(historyLabel)
     startNotes(notes)
     statusText = modifier !== ""
-      ? "Playing " + Model.noteClassName(midi) + " " + Model.qualityDisplayName(modifier) + " · " + notes.map(Model.noteName).join("  ")
-      : "Playing " + Model.noteName(midi) + (audioReady ? "" : " · audio starting…")
+      ? "Playing " + historyLabel + " · " + notes.map(Model.noteName).join("  ")
+      : "Playing " + Model.noteName(notes[0]) + (audioReady ? "" : " · audio starting…")
     keyArea.forceActiveFocus()
   }
   function releaseMidi(midi) {
@@ -193,11 +262,20 @@ Panel {
     stopActiveNotes()
     activeDegreeIndex = index
     var chord = chords[index]
-    var notes = Model.chordNotes(chord.root, chord.quality, octave)
+    var rawNotes = Model.chordNotes(chord.root, chord.quality, octave)
+    var notes = resolveScaleNotes(rawNotes)
+    if (notes.length === 0) {
+      activeDegreeIndex = -1
+      statusText = "Strict lock blocked " + Model.chordDisplayName(chord.root, chord.quality)
+      return
+    }
     activeChordNotes = notes
-    recordHistory(Model.chordDisplayName(chord.root, chord.quality))
+    var playedRoot = scaleLockMode === "fit" ? chord.root + lastScaleShift : chord.root
+    var historyLabel = Model.chordDisplayName(playedRoot, chord.quality)
+    if (scaleLockMode === "nearest") historyLabel += " · Fit"
+    recordHistory(historyLabel)
     startNotes(notes)
-    statusText = chord.roman + " · " + Model.chordDisplayName(chord.root, chord.quality) + " · " + notes.map(Model.noteName).join("  ")
+    statusText = chord.roman + " · " + historyLabel + " · " + notes.map(Model.noteName).join("  ")
   }
   function releaseDegree(index) {
     if (activeDegreeIndex === index) stopActiveNotes()
@@ -242,7 +320,8 @@ Panel {
     if (process.running) return
     statusText = action === "save" ? "Saving project…" : "Exporting MIDI…"
     process.command = ["python3", enginePath, action, "--output", output,
-      "--tempo", "110", "--progression", progressionSpec()]
+      "--tempo", "110", "--key", Model.asciiNoteName(keyRoot),
+      "--scale", scaleType, "--progression", progressionSpec()]
     process.running = true
   }
 
@@ -318,7 +397,12 @@ Panel {
           Column {
             width: parent.width - headerControls.width - Style.space(10)
             Text { text: "CHORDPUMPER PROMARCHY"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.title; font.bold: true }
-            Text { text: "C major · " + root.currentStyle.name + " · 110 BPM"; color: Qt.darker(root.foreground, 1.4); font.family: root.fontFamily; font.pixelSize: Style.font.bodySmall }
+            Text {
+              text: Model.pitchClassLabel(root.keyRoot) + " " + root.scaleType + " · " + root.currentStyle.name + " · 110 BPM"
+              color: Qt.darker(root.foreground, 1.4)
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
           }
           Row {
             id: headerControls
@@ -366,6 +450,75 @@ Panel {
               fontFamily: root.fontFamily
               fontSize: Style.font.bodySmall
               onClicked: { root.applyStyle(index); keyArea.forceActiveFocus() }
+            }
+          }
+        }
+
+        Row {
+          spacing: Style.space(5)
+          Text {
+            text: "SCALE LOCK"
+            color: Qt.darker(root.foreground, 1.35)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            anchors.verticalCenter: parent.verticalCenter
+          }
+          Button {
+            text: Model.pitchClassLabel(root.keyRoot) + "  ▾"
+            selected: root.keyPickerOpen
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: root.keyPickerOpen = !root.keyPickerOpen
+          }
+          Button {
+            text: "Major"
+            selected: root.scaleType === "major"
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: { root.setScaleType("major"); keyArea.forceActiveFocus() }
+          }
+          Button {
+            text: "Minor"
+            selected: root.scaleType === "minor"
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: { root.setScaleType("minor"); keyArea.forceActiveFocus() }
+          }
+          Repeater {
+            model: root.scaleLockModes
+            Button {
+              required property var modelData
+              text: modelData.name
+              selected: root.scaleLockMode === modelData.id
+              bordered: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              onClicked: { root.setScaleLockMode(modelData.id); keyArea.forceActiveFocus() }
+            }
+          }
+        }
+
+        Grid {
+          visible: root.keyPickerOpen
+          columns: 6
+          spacing: Style.space(5)
+          Repeater {
+            model: root.scaleRoots
+            Button {
+              required property int modelData
+              width: (content.width - Style.space(25)) / 6
+              text: Model.pitchClassLabel(modelData)
+              selected: root.keyRoot === modelData
+              bordered: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              onClicked: { root.setKeyRoot(modelData); keyArea.forceActiveFocus() }
             }
           }
         }
@@ -456,11 +609,12 @@ Panel {
               required property var modelData
               required property int index
               readonly property int midi: 12 * (root.octave + 1) + modelData.offset
+              readonly property bool scaleTone: root.scaleAllowed(midi)
               x: index * piano.whiteKeyWidth
               y: 0
               width: piano.whiteKeyWidth + 1
               height: piano.height
-              color: root.activeMidi === midi ? Color.accent : "#f4f1e8"
+              color: root.activeMidi === midi ? Color.accent : (scaleTone ? "#f4f1e8" : "#777981")
               border.width: 1
               border.color: "#303138"
               radius: index === 0 || index === root.whiteKeys.length - 1 ? Style.space(3) : 0
@@ -471,7 +625,7 @@ Panel {
                 anchors.bottomMargin: Style.space(4)
                 text: modelData.letter
                 visible: modelData.letter !== ""
-                color: root.activeMidi === parent.midi ? "#ffffff" : "#1a1b20"
+                color: root.activeMidi === parent.midi ? "#ffffff" : (parent.scaleTone ? "#1a1b20" : "#3f4148")
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.subtitle
                 font.bold: true
@@ -482,7 +636,7 @@ Panel {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Style.space(5)
                 text: Model.noteName(parent.midi)
-                color: root.activeMidi === parent.midi ? "#ffffff" : "#676971"
+                color: root.activeMidi === parent.midi ? "#ffffff" : (parent.scaleTone ? "#676971" : "#474950")
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
               }
@@ -500,12 +654,13 @@ Panel {
             Rectangle {
               required property var modelData
               readonly property int midi: 12 * (root.octave + 1) + modelData.offset
+              readonly property bool scaleTone: root.scaleAllowed(midi)
               z: 2
               x: modelData.after * piano.whiteKeyWidth - piano.blackKeyWidth / 2
               y: 0
               width: piano.blackKeyWidth
               height: piano.blackKeyHeight
-              color: root.activeMidi === midi ? Color.accent : "#18191e"
+              color: root.activeMidi === midi ? Color.accent : (scaleTone ? "#18191e" : "#4a4b52")
               border.width: 1
               border.color: root.activeMidi === midi ? Qt.lighter(Color.accent, 1.25) : "#050506"
               radius: Style.space(3)
@@ -515,7 +670,7 @@ Panel {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: Style.space(7)
-                color: root.activeMidi === parent.midi ? Qt.darker(Color.accent, 1.15) : "#0b0c0f"
+                color: root.activeMidi === parent.midi ? Qt.darker(Color.accent, 1.15) : (parent.scaleTone ? "#0b0c0f" : "#36373d")
                 radius: Style.space(2)
               }
               Text {
@@ -523,7 +678,7 @@ Panel {
                 anchors.bottom: blackNoteLabel.top
                 anchors.bottomMargin: Style.space(3)
                 text: modelData.letter
-                color: "#ffffff"
+                color: parent.scaleTone ? "#ffffff" : "#8c8e96"
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
                 font.bold: true
@@ -534,7 +689,7 @@ Panel {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Style.space(6)
                 text: Model.noteName(parent.midi)
-                color: "#aeb0ba"
+                color: parent.scaleTone ? "#aeb0ba" : "#777983"
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
               }

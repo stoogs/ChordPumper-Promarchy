@@ -55,13 +55,13 @@ def parse_progression(raw: str) -> list[dict[str, str]]:
     return chords
 
 
-def project_data(tempo: int, progression: list[dict[str, str]]) -> dict:
+def project_data(tempo: int, progression: list[dict[str, str]], key: str, scale: str) -> dict:
     return {
         "version": 1,
         "tempo": tempo,
         "timeSignature": [4, 4],
-        "key": "C",
-        "scale": "major",
+        "key": key,
+        "scale": scale,
         "bars": len(progression),
         "tracks": {"chords": progression, "melody": []},
     }
@@ -163,6 +163,8 @@ def main() -> int:
     parser.add_argument("--output")
     parser.add_argument("--tempo", type=int, default=110)
     parser.add_argument("--progression", default="C:maj,A:min,F:maj,G:maj")
+    parser.add_argument("--key", choices=tuple(NOTE_OFFSETS), default="C")
+    parser.add_argument("--scale", choices=("major", "minor"), default="major")
     args = parser.parse_args()
 
     if args.action == "serve":
@@ -180,7 +182,7 @@ def main() -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     if args.action == "save":
-        output.write_text(json.dumps(project_data(args.tempo, progression), indent=2) + "\n")
+        output.write_text(json.dumps(project_data(args.tempo, progression, args.key, args.scale), indent=2) + "\n")
     else:
         output.write_bytes(midi_bytes(args.tempo, progression))
     print(output)

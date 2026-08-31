@@ -29,6 +29,7 @@ Then verify:
 - All 24 style choices
 - `1–6` chord playback
 - Momentary and locked chord shapes
+- All scale roots, both scale types, and all four scale-lock modes
 - Style cycling with `<`
 - Random style, chord, and chord-shape selection
 - Save and MIDI export
