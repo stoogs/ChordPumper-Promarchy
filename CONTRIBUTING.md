@@ -30,7 +30,7 @@ Then verify:
 - `1–6` chord playback
 - Momentary and locked chord shapes
 - Style cycling with `<`
-- Random progression generation
+- Random style, chord, and chord-shape selection
 - Save and MIDI export
 - Shell restart and plugin re-enable
 

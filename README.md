@@ -1,6 +1,6 @@
 # ChordPumper Promarchy
 
-ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad for the Omarchy Quattro shell. It turns the Omarchy bar into a quick musical notebook: play a piano, voice chords from the home row, audition style-aware progressions, randomize a four-bar idea, and export the result as standard MIDI.
+ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad for the Omarchy Quattro shell. It turns the Omarchy bar into a quick musical notebook: play a piano, voice chords from the home row, audition style-aware harmony, explore randomized palettes, and export MIDI.
 
 ## Features
 
@@ -9,7 +9,6 @@ ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad fo
 - 24 musical style palettes
 - Six playable, style-aware progression chords
 - Eight momentary or lockable chord shapes per style
-- Four-bar progression generator
 - Recent-note history
 - JSON project saving
 - Standard MIDI file export
@@ -91,7 +90,7 @@ Every style defines both its six progression chords and eight chord-shape choice
 
 ## Random, Save, and MIDI
 
-**Random** selects one of the 24 styles and generates a four-bar progression from that style's harmonic vocabulary.
+**Random** selects one of the 24 styles, one of its six named chords, and a compatible locked chord shape.
 
 **Save** writes the current project to:
 

@@ -94,7 +94,7 @@ Panel {
       ? "Locked " + Model.qualityFullName(lockedModifier) + " · every piano key now voices a chord"
       : "Modifier unlocked · piano returned to single notes"
   }
-  function applyStyle(index, randomProgression) {
+  function applyStyle(index) {
     stopActiveNotes()
     styleIndex = ((index % styles.length) + styles.length) % styles.length
     stylePickerOpen = false
@@ -103,26 +103,22 @@ Panel {
     modifier = ""
     var pool = Styles.chordsFor(styleIndex, keyRoot)
     var next = []
-    if (randomProgression) {
-      var previous = -1
-      for (var i = 0; i < 4; i++) {
-        var pick = Math.floor(Math.random() * pool.length)
-        if (pick === previous) pick = (pick + 1) % pool.length
-        next.push(pool[pick])
-        previous = pick
-      }
-    } else {
-      var order = [0, 2, 3, 1]
-      for (var j = 0; j < order.length; j++) next.push(pool[order[j] % pool.length])
-    }
+    var order = [0, 2, 3, 1]
+    for (var j = 0; j < order.length; j++) next.push(pool[order[j] % pool.length])
     progression = next
     selectedDegree = 0
-    statusText = currentStyle.name + " style · " + (randomProgression ? "new random progression" : "palette loaded")
+    statusText = currentStyle.name + " style · palette loaded"
   }
-  function cycleStyle() { applyStyle(styleIndex + 1, false) }
+  function cycleStyle() { applyStyle(styleIndex + 1) }
   function randomizeAll() {
     var nextStyle = Math.floor(Math.random() * styles.length)
-    applyStyle(nextStyle, true)
+    applyStyle(nextStyle)
+    selectedDegree = Math.floor(Math.random() * chords.length)
+    lockedModifier = modifiers[Math.floor(Math.random() * modifiers.length)]
+    modifier = lockedModifier
+    statusText = "Random · " + currentStyle.name + " · "
+      + Model.chordFullName(chords[selectedDegree].root, chords[selectedDegree].quality)
+      + " · " + Model.qualityFullName(lockedModifier) + " locked"
   }
   function styleSuggestionText() {
     var names = []
@@ -266,7 +262,7 @@ Panel {
     }
   }
 
-  Component.onCompleted: applyStyle(0, false)
+  Component.onCompleted: applyStyle(0)
 
   Process {
     id: saveProcess
@@ -321,7 +317,7 @@ Panel {
           Column {
             width: parent.width - headerControls.width - Style.space(10)
             Text { text: "CHORDPUMPER PROMARCHY"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.title; font.bold: true }
-            Text { text: "C major · " + root.currentStyle.name + " · 4 bars · 110 BPM"; color: Qt.darker(root.foreground, 1.4); font.family: root.fontFamily; font.pixelSize: Style.font.bodySmall }
+            Text { text: "C major · " + root.currentStyle.name + " · 110 BPM"; color: Qt.darker(root.foreground, 1.4); font.family: root.fontFamily; font.pixelSize: Style.font.bodySmall }
           }
           Row {
             id: headerControls
@@ -368,7 +364,7 @@ Panel {
               foreground: root.foreground
               fontFamily: root.fontFamily
               fontSize: Style.font.bodySmall
-              onClicked: { root.applyStyle(index, false); keyArea.forceActiveFocus() }
+              onClicked: { root.applyStyle(index); keyArea.forceActiveFocus() }
             }
           }
         }
@@ -418,33 +414,6 @@ Panel {
               fontFamily: root.fontFamily
               fontSize: Style.font.bodySmall
               onClicked: { root.toggleModifierLock(modelData); keyArea.forceActiveFocus() }
-            }
-          }
-        }
-
-        Text { text: "4-BAR SKETCH"; color: Qt.darker(root.foreground, 1.35); font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
-        Row {
-          spacing: Style.space(8)
-          Repeater {
-            model: root.progression
-            BorderSurface {
-              required property var modelData
-              required property int index
-              width: Style.space(172); height: Style.space(62)
-              color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.05)
-              radius: Style.cornerRadius
-              borderSpec: Border.flat(Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.14), 1)
-              Text {
-                anchors.centerIn: parent
-                width: parent.width - Style.space(12)
-                text: (index + 1) + "  ·  " + Model.chordFullName(modelData.root, modelData.quality)
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-              }
             }
           }
         }
