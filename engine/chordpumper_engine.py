@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dependency-free audio, project, and MIDI engine for ChordPumper Promarchy."""
+"""Dependency-free audio and MIDI engine for ChordPumper Promarchy."""
 
 from __future__ import annotations
 
@@ -11,22 +11,6 @@ import struct
 import subprocess
 import sys
 from pathlib import Path
-
-NOTE_OFFSETS = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5,
-                "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
-INTERVALS = {
-    "maj": (0, 4, 7), "min": (0, 3, 7), "7": (0, 4, 7, 10),
-    "maj7": (0, 4, 7, 11), "min7": (0, 3, 7, 10),
-    "sus2": (0, 2, 7), "sus4": (0, 5, 7), "dim": (0, 3, 6),
-    "aug": (0, 4, 8), "add9": (0, 4, 7, 14),
-    "maj9": (0, 4, 7, 11, 14), "min9": (0, 3, 7, 10, 14),
-    "9": (0, 4, 7, 10, 14), "11": (0, 4, 7, 10, 14, 17),
-    "min11": (0, 3, 7, 10, 14, 17), "13": (0, 4, 7, 10, 14, 21),
-    "dim7": (0, 3, 6, 9), "6": (0, 4, 7, 9),
-    "min6": (0, 3, 7, 9), "5": (0, 7), "7sus4": (0, 5, 7, 10),
-    "m7b5": (0, 3, 6, 10), "maj7#11": (0, 4, 7, 11, 18),
-}
-
 
 def variable_length(value: int) -> bytes:
     buffer = value & 0x7F
@@ -43,46 +27,36 @@ def variable_length(value: int) -> bytes:
             return bytes(result)
 
 
-def parse_progression(raw: str) -> list[dict[str, str]]:
-    chords = []
-    for token in raw.split(","):
-        root, quality = token.strip().split(":", 1)
-        if root not in NOTE_OFFSETS or quality not in INTERVALS:
-            raise ValueError(f"Unsupported chord: {token}")
-        chords.append({"root": root, "quality": quality})
-    if not 1 <= len(chords) <= 16:
-        raise ValueError("A project needs between 1 and 16 bars")
-    return chords
+def parse_events(raw: str) -> list[list[int]]:
+    parsed = json.loads(raw)
+    if not isinstance(parsed, list) or not parsed:
+        raise ValueError("played history is empty")
+    events = []
+    for event in parsed:
+        notes = event.get("notes") if isinstance(event, dict) else None
+        if not isinstance(notes, list) or not notes:
+            raise ValueError("every played event needs at least one note")
+        clean_notes = [int(note) for note in notes]
+        if any(note < 0 or note > 127 for note in clean_notes):
+            raise ValueError("MIDI notes must be between 0 and 127")
+        events.append(clean_notes)
+    return events
 
 
-def project_data(tempo: int, progression: list[dict[str, str]], key: str, scale: str) -> dict:
-    return {
-        "version": 1,
-        "tempo": tempo,
-        "timeSignature": [4, 4],
-        "key": key,
-        "scale": scale,
-        "bars": len(progression),
-        "tracks": {"chords": progression, "melody": []},
-    }
-
-
-def midi_bytes(tempo: int, progression: list[dict[str, str]]) -> bytes:
+def midi_bytes(tempo: int, events: list[list[int]]) -> bytes:
     ticks = 480
-    bar_ticks = ticks * 4
+    event_ticks = ticks
     track = bytearray()
     microseconds = round(60_000_000 / tempo)
     track += b"\x00\xff\x51\x03" + microseconds.to_bytes(3, "big")
     track += b"\x00\xff\x58\x04\x04\x02\x18\x08"
     track += b"\x00\xc0\x00"  # Acoustic grand piano.
 
-    for chord in progression:
-        root_midi = 60 + NOTE_OFFSETS[chord["root"]]
-        notes = [root_midi + interval for interval in INTERVALS[chord["quality"]]]
+    for notes in events:
         for note in notes:
             track += b"\x00\x90" + bytes((note, 92))
         for index, note in enumerate(notes):
-            track += variable_length(bar_ticks if index == 0 else 0)
+            track += variable_length(event_ticks if index == 0 else 0)
             track += b"\x80" + bytes((note, 0))
 
     track += b"\x00\xff\x2f\x00"
@@ -159,16 +133,10 @@ def serve() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("save", "midi", "serve"))
+    parser.add_argument("action", choices=("midi", "serve"))
     parser.add_argument("--output")
     parser.add_argument("--tempo", type=int, default=110)
-    parser.add_argument("--progression", default="C:maj,A:min,F:maj,G:maj")
-    parser.add_argument("--key", choices=tuple(NOTE_OFFSETS), default="C")
-    parser.add_argument("--scale", choices=(
-        "major", "minor", "harmonicMinor", "melodicMinor",
-        "majorPentatonic", "minorPentatonic", "blues", "dorian",
-        "phrygian", "lydian", "mixolydian", "locrian",
-    ), default="major")
+    parser.add_argument("--events")
     args = parser.parse_args()
 
     if args.action == "serve":
@@ -178,17 +146,16 @@ def main() -> int:
             print(json.dumps({"type": "error", "message": str(error)}), flush=True)
             return 1
     if not args.output:
-        parser.error("--output is required for save and midi")
+        parser.error("--output is required for midi")
     if not 30 <= args.tempo <= 300:
         parser.error("tempo must be between 30 and 300 BPM")
-    progression = parse_progression(args.progression)
+    if not args.events:
+        parser.error("--events is required for midi")
+    events = parse_events(args.events)
     output = Path(args.output).expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    if args.action == "save":
-        output.write_text(json.dumps(project_data(args.tempo, progression, args.key, args.scale), indent=2) + "\n")
-    else:
-        output.write_bytes(midi_bytes(args.tempo, progression))
+    output.write_bytes(midi_bytes(args.tempo, events))
     print(output)
     return 0
 

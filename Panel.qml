@@ -40,6 +40,7 @@ Panel {
   property var activeChordNotes: []
   property var adjustedMidiNotes: []
   property var noteHistory: []
+  property var playedEvents: []
   property bool audioReady: false
   property int styleIndex: 0
   property bool stylePickerOpen: false
@@ -48,7 +49,6 @@ Panel {
   readonly property var styles: Styles.all()
   readonly property var currentStyle: Styles.at(styleIndex)
   readonly property var chords: Styles.chordsFor(styleIndex, keyRoot, chordPaletteMode, chordPaletteSeed)
-  property var progression: []
   property string statusText: "Keyboard ready · audio engine is the next milestone"
   readonly property var modifiers: currentStyle.shapes
   readonly property var modifierKeys: ["C", "V", "B", "N", "M", ",", ".", "/"]
@@ -129,13 +129,6 @@ Panel {
       ? "Locked " + Model.qualityDisplayName(lockedModifier) + " · every piano key now voices a chord"
       : "Modifier unlocked · piano returned to single notes"
   }
-  function rebuildProgression() {
-    var pool = chords
-    var next = []
-    var order = [0, 2, 3, 1]
-    for (var j = 0; j < order.length; j++) next.push(pool[order[j] % pool.length])
-    progression = next
-  }
   function applyStyle(index) {
     stopActiveNotes()
     styleIndex = ((index % styles.length) + styles.length) % styles.length
@@ -144,7 +137,6 @@ Panel {
     lockedModifier = ""
     modifier = ""
     chordPaletteMode = "core"
-    rebuildProgression()
     selectedDegree = 0
     statusText = currentStyle.name + " style · palette loaded"
   }
@@ -154,7 +146,6 @@ Panel {
     applyStyle(nextStyle)
     chordPaletteMode = "shuffle"
     chordPaletteSeed = Math.floor(Math.random() * 1000000) + 1
-    rebuildProgression()
     selectedDegree = Math.floor(Math.random() * chords.length)
     lockedModifier = modifiers[Math.floor(Math.random() * modifiers.length)]
     modifier = lockedModifier
@@ -167,7 +158,6 @@ Panel {
     chordPaletteMode = mode
     if (mode === "shuffle") chordPaletteSeed = Math.floor(Math.random() * 1000000) + 1
     selectedDegree = 0
-    rebuildProgression()
     statusText = currentStyle.name + " · " + chordPaletteName() + " chord palette"
   }
   function chordPaletteName() {
@@ -182,7 +172,6 @@ Panel {
     keyPickerOpen = false
     scalePickerOpen = false
     if (scaleLockMode === "off") scaleLockMode = "nearest"
-    rebuildProgression()
     statusText = "Scale locked · " + Model.pitchClassLabel(keyRoot) + " " + scaleTypeName() + " · " + scaleLockModeName()
   }
   function setScaleType(value) {
@@ -242,12 +231,6 @@ Panel {
     var names = []
     for (var i = 0; i < chords.length; i++) names.push(Model.chordDisplayName(chords[i].root, chords[i].quality))
     return names.join("  •  ")
-  }
-  function progressionSpec() {
-    var parts = []
-    for (var i = 0; i < progression.length; i++)
-      parts.push(Model.asciiNoteName(progression[i].root) + ":" + progression[i].quality)
-    return parts.join(",")
   }
   function numberChordIndex(key) {
     if (key >= Qt.Key_1 && key <= Qt.Key_9) return key - Qt.Key_1
@@ -315,7 +298,7 @@ Panel {
       var playedRoot = scaleLockMode === "fit" ? midi + lastScaleShift : midi
       historyLabel = Model.noteClassName(playedRoot) + " " + Model.qualityDisplayName(modifier)
     }
-    recordHistory(historyLabel)
+    recordHistory(historyLabel, notes)
     startNotes(notes)
     statusText = modifier !== ""
       ? "Playing " + historyLabel + " · " + notes.map(Model.noteName).join("  ")
@@ -339,18 +322,21 @@ Panel {
     activeChordNotes = notes
     var playedRoot = scaleLockMode === "fit" ? chord.root + lastScaleShift : chord.root
     var historyLabel = Model.chordDisplayName(playedRoot, chord.quality)
-    recordHistory(historyLabel)
+    recordHistory(historyLabel, notes)
     startNotes(notes)
     statusText = chord.roman + " · " + historyLabel + " · " + notes.map(Model.noteName).join("  ")
   }
   function releaseDegree(index) {
     if (activeDegreeIndex === index) stopActiveNotes()
   }
-  function recordHistory(label) {
+  function recordHistory(label, notes) {
     var nextHistory = noteHistory.slice()
     nextHistory.push(label)
     if (nextHistory.length > 12) nextHistory = nextHistory.slice(nextHistory.length - 12)
     noteHistory = nextHistory
+    var nextEvents = playedEvents.slice()
+    nextEvents.push({ label: label, notes: notes.slice() })
+    playedEvents = nextEvents
   }
   function startNotes(notes) {
     if (!audioProcess.running) return
@@ -383,13 +369,30 @@ Panel {
     }
   }
 
-  function runEngine(process, action, output) {
-    if (process.running) return
-    statusText = action === "save" ? "Saving project…" : "Exporting MIDI…"
-    process.command = ["python3", enginePath, action, "--output", output,
-      "--tempo", "110", "--key", Model.asciiNoteName(keyRoot),
-      "--scale", scaleType, "--progression", progressionSpec()]
-    process.running = true
+  function filenamePart(value) {
+    return String(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+  }
+  function keyFilenamePart() {
+    return ["c", "c-sharp", "d", "d-sharp", "e", "f", "f-sharp", "g", "g-sharp", "a", "a-sharp", "b"][keyRoot]
+  }
+  function twoDigits(value) { return value < 10 ? "0" + value : String(value) }
+  function midiFilename() {
+    var now = new Date()
+    var stamp = now.getFullYear() + "-" + twoDigits(now.getMonth() + 1) + "-" + twoDigits(now.getDate())
+      + "-" + twoDigits(now.getHours()) + twoDigits(now.getMinutes()) + twoDigits(now.getSeconds())
+    return filenamePart(currentStyle.name) + "-" + keyFilenamePart() + "-" + filenamePart(scaleTypeName()) + "-"
+      + filenamePart(chordPaletteName()) + "-" + stamp + ".mid"
+  }
+  function exportMidi() {
+    if (midiProcess.running) return
+    if (playedEvents.length === 0) {
+      statusText = "Play something first · history is empty"
+      return
+    }
+    statusText = "Exporting " + playedEvents.length + " played events…"
+    midiProcess.command = ["python3", enginePath, "midi", "--output", outputDir + "/" + midiFilename(),
+      "--tempo", "110", "--events", JSON.stringify(playedEvents)]
+    midiProcess.running = true
   }
 
   Process {
@@ -410,18 +413,6 @@ Panel {
   }
 
   Component.onCompleted: applyStyle(0)
-
-  Process {
-    id: saveProcess
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.statusText = "Saved · " + String(text || "").trim()
-    }
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: if (String(text || "").trim() !== "") root.statusText = "Save failed · " + String(text).trim()
-    }
-  }
 
   Process {
     id: midiProcess
@@ -849,21 +840,14 @@ Panel {
         Row {
           width: parent.width; spacing: Style.space(8)
           Text {
-            width: parent.width - saveButton.width - exportButton.width - parent.spacing * 2
+            width: parent.width - exportButton.width - parent.spacing
             text: root.statusText; color: Qt.darker(root.foreground, 1.3); font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight
           }
           Button {
-            id: saveButton; text: "Save"; bordered: true; foreground: root.foreground
-            onClicked: {
-              root.runEngine(saveProcess, "save", root.outputDir + "/Untitled.chordpumper.json")
-              keyArea.forceActiveFocus()
-            }
-          }
-          Button {
             id: exportButton; text: "Export MIDI"; bordered: true; foreground: root.foreground
             onClicked: {
-              root.runEngine(midiProcess, "midi", root.outputDir + "/Untitled.mid")
+              root.exportMidi()
               keyArea.forceActiveFocus()
             }
           }

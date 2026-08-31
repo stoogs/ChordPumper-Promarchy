@@ -11,8 +11,7 @@ ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad fo
 - Eight momentary or lockable chord shapes per style
 - Twelve selectable scales with note-snap, chord-snap, and strict modes
 - Recent-note history
-- JSON project saving
-- Standard MIDI file export
+- Full played-history MIDI export
 - Theme-aware Omarchy panel and bar widget
 
 ## Requirements
@@ -98,7 +97,7 @@ Included styles:
 | Cinematic | Epic | Jazz | Neo-Soul |
 | Bossa Nova | Gospel | Reggae | Classical |
 
-Every style defines both its six progression chords and eight chord-shape choices. The interface uses compact, familiar theory labels such as `Dom 7`, `Sus 4`, and `Dim 7` where full descriptions would obscure the controls.
+Every style defines six foundational progression chords, four additional colour slots, and eight chord-shape choices. The interface uses compact, familiar theory labels such as `Dom 7`, `Sus 4`, and `Dim 7` where full descriptions would obscure the controls.
 
 ### Scale lock
 
@@ -121,27 +120,21 @@ Note Snap is enabled initially. Selecting a root or scale type while locking is 
 
 When scale lock is active, available piano keys remain bright and unavailable keys are dimmed. The requested key uses the current Omarchy accent; any corrected destination notes use the theme's urgent color so the remapping is immediately visible. The rest of the piano also follows the active Omarchy theme.
 
-## Random, Save, and MIDI
+## Random and MIDI
 
-**Random** selects one of the 24 styles, one of its six named chords, and a compatible locked chord shape.
+**Random** selects one of the 24 styles, a shuffled ten-chord palette, one named chord, and a compatible locked chord shape.
 
-**Save** writes the current project to:
-
-```text
-~/Music/ChordPumper Promarchy/Untitled.chordpumper.json
-```
-
-**Export MIDI** writes a format-0 Standard MIDI file to:
+**Export MIDI** writes every note and chord played during the current session, in order, to a format-0 Standard MIDI file. Each played gesture occupies one beat so the history is immediately editable as a sequence in a DAW. The filename includes the style, key and scale, chord set, date, and time, for example:
 
 ```text
-~/Music/ChordPumper Promarchy/Untitled.mid
+~/Music/ChordPumper Promarchy/jazz-c-major-shuffle-2026-08-31-184512.mid
 ```
 
-The files can be imported into Bitwig, Reaper, Ardour, Ableton Live, Logic, or another MIDI-capable workstation.
+The file can be imported into Bitwig, Reaper, Ardour, Ableton Live, Logic, or another MIDI-capable workstation. The visible Recent strip remains compact, but MIDI export retains the full session history.
 
 ## How it works
 
-The QML interface runs inside the existing Omarchy shell process. It starts the bundled Python engine as a child process and sends newline-delimited JSON note events over standard input. The engine controls FluidSynth, while its dependency-free MIDI writer handles saving and export.
+The QML interface runs inside the existing Omarchy shell process. It starts the bundled Python engine as a child process and sends newline-delimited JSON note events over standard input. The engine controls FluidSynth, while its dependency-free MIDI writer exports the played-event history.
 
 See [Architecture](docs/architecture.md) for the component and security model.
 
@@ -152,7 +145,7 @@ Omarchy plugins run unsandboxed with the current user's permissions. ChordPumper
 - Runs only its bundled Python engine and the system FluidSynth executable.
 - Does not use the network.
 - Does not request elevated privileges.
-- Writes files only after Save or Export MIDI is clicked.
+- Writes files only after Export MIDI is clicked.
 - Writes only beneath `~/Music/ChordPumper Promarchy` by default.
 - Does not modify Omarchy configuration directly.
 
@@ -170,7 +163,7 @@ If no other software needs the optional audio packages, they can also be removed
 omarchy pkg drop fluidsynth soundfont-fluid
 ```
 
-Saved projects and MIDI files under `~/Music/ChordPumper Promarchy` are not deleted automatically.
+MIDI files under `~/Music/ChordPumper Promarchy` are not deleted automatically.
 
 ## Development
 

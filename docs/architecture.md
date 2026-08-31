@@ -13,7 +13,7 @@ The plugin uses the existing long-running Quickshell process. It never starts an
 ## Music model
 
 - `Model.js` contains note names, intervals, chord construction, full chord names, and keyboard mapping.
-- `Styles.js` contains the 24 musical palettes. Each style supplies six progression chords and eight chord shapes.
+- `Styles.js` contains the 24 musical palettes. Each style supplies six foundational chords, four generated colour slots, and eight chord shapes.
 
 These files are deliberately deterministic. No remote model, API, or network access is involved.
 
@@ -29,7 +29,7 @@ These files are deliberately deterministic. No remote model, API, or network acc
 
 The QML process remains responsible for key state. Closing the panel sends note-off and all-notes-off messages to prevent stuck voices.
 
-Save and MIDI modes run as short-lived processes. MIDI output is generated directly as a format-0 Standard MIDI file with 480 ticks per quarter note.
+MIDI export runs as a short-lived process. The full session event history is generated directly as a format-0 Standard MIDI file with 480 ticks per quarter note and one beat per played gesture.
 
 ## Trust boundary
 

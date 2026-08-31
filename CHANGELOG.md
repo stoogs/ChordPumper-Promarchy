@@ -2,6 +2,12 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.6.0 — 2026-08-31
+
+- Changed MIDI export to include the complete session history of heard notes and chords in playback order.
+- Added descriptive `style-key-scale-palette-date-time.mid` filenames.
+- Removed project Save from the interface and engine because projects cannot yet be loaded.
+
 ## 1.5.0 — 2026-08-31
 
 - Expanded the style chord row from six to ten playable slots mapped to `1–9` and `0`.

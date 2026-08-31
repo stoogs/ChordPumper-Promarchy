@@ -35,7 +35,7 @@ Then verify:
 - Piano colors update correctly when the active Omarchy theme changes
 - Style cycling with `<`
 - Random style, chord, and chord-shape selection
-- Save and MIDI export
+- Empty-history handling and full played-history MIDI export
 - Shell restart and plugin re-enable
 
 Inspect runtime errors with:
@@ -62,4 +62,4 @@ Display names should remain clear and compact. Use the established `Dom`, `Sus`,
 
 ## Pull requests
 
-Keep changes focused, document visible behavior, and update `CHANGELOG.md` when appropriate. Do not commit generated MIDI, saved projects, SoundFonts, package caches, or Python bytecode.
+Keep changes focused, document visible behavior, and update `CHANGELOG.md` when appropriate. Do not commit generated MIDI, SoundFonts, package caches, or Python bytecode.
