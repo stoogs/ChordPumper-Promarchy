@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.stoogs.chordpumper-promarchy",
+  "name": "ChordPumper Promarchy",
+  "version": "1.0.0",
+  "author": "Stoogs",
+  "license": "MIT",
+  "description": "A keyboard-driven chord, harmony, and MIDI sketchpad for Omarchy",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "ChordPumper Promarchy",
+    "description": "Play styled chords, build progressions, and export MIDI",
+    "category": "Media",
+    "allowMultiple": false,
+    "defaultSection": "center"
+  }
+}
