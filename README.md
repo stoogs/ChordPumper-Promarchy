@@ -9,7 +9,7 @@ ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad fo
 - 24 musical style palettes
 - Six playable, style-aware progression chords
 - Eight momentary or lockable chord shapes per style
-- Major/minor scale lock with nearest-note, nearest-chord, and strict modes
+- Major/minor scale lock with note-snap, chord-snap, and strict modes
 - Recent-note history
 - JSON project saving
 - Standard MIDI file export
@@ -93,16 +93,16 @@ Every style defines both its six progression chords and eight chord-shape choice
 
 Choose any of the twelve chromatic roots using natural and combined sharp/flat labels, then select Major or natural Minor.
 
-Nearest Note is enabled initially. Selecting a root or scale type while locking is Off also enables Nearest Note, so changing the scale always has an immediate visible and audible result.
+Note Snap is enabled initially. Selecting a root or scale type while locking is Off also enables Note Snap, so changing the scale always has an immediate visible and audible result.
 
 | Mode | Behaviour |
 | --- | --- |
 | Off | Plays the requested notes without correction. |
-| Nearest Note | Moves each out-of-scale tone to its nearest scale tone. |
-| Nearest Chord | Transposes a complete voicing by the smallest useful amount to maximize its scale fit. |
+| Note Snap | Moves each out-of-scale tone independently to its nearest scale tone. This can alter a chord's quality. |
+| Chord Snap | Preserves the complete chord shape and transposes it by the smallest amount that puts every tone in the scale. It blocks chord shapes that have no exact diatonic fit. |
 | Strict | Rejects the complete note or chord if any tone is outside the selected scale. |
 
-When scale lock is active, available piano keys remain bright and unavailable keys are dimmed.
+When scale lock is active, available piano keys remain bright and unavailable keys are dimmed. The requested key uses the current Omarchy accent; any corrected destination notes use the theme's urgent color so the remapping is immediately visible. The rest of the piano also follows the active Omarchy theme.
 
 ## Random, Save, and MIDI
 

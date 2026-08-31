@@ -17,6 +17,12 @@ Panel {
   readonly property var barIdentity: hostWidget || root
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  readonly property color pianoSurface: Color.popups.background
+  readonly property color pianoWhite: Color.foreground
+  readonly property color pianoBlack: Color.background
+  readonly property color pianoMuted: Color.muted
+  readonly property color pianoPressed: Color.accent
+  readonly property color pianoAdjusted: Color.urgent
 
   property int keyRoot: 0
   property string scaleType: "major"
@@ -31,6 +37,7 @@ Panel {
   property int activeMidi: -1
   property int activeDegreeIndex: -1
   property var activeChordNotes: []
+  property var adjustedMidiNotes: []
   property var noteHistory: []
   property bool audioReady: false
   property int styleIndex: 0
@@ -45,8 +52,8 @@ Panel {
   readonly property var scaleRoots: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
   readonly property var scaleLockModes: [
     { id: "off", name: "Off" },
-    { id: "nearest", name: "Nearest Note" },
-    { id: "fit", name: "Nearest Chord" },
+    { id: "nearest", name: "Note Snap" },
+    { id: "fit", name: "Chord Snap" },
     { id: "strict", name: "Strict" }
   ]
   readonly property var whiteKeys: [
@@ -163,6 +170,7 @@ Panel {
   }
   function resolveScaleNotes(notes) {
     lastScaleShift = 0
+    adjustedMidiNotes = []
     if (scaleLockMode === "off") return notes.slice()
     if (scaleLockMode === "strict") {
       for (var i = 0; i < notes.length; i++)
@@ -171,14 +179,21 @@ Panel {
     }
     if (scaleLockMode === "nearest") {
       var snapped = []
-      for (var j = 0; j < notes.length; j++)
-        snapped.push(Model.nearestScaleNote(notes[j], keyRoot, scaleType))
+      for (var j = 0; j < notes.length; j++) {
+        var snappedNote = Model.nearestScaleNote(notes[j], keyRoot, scaleType)
+        snapped.push(snappedNote)
+        if (snappedNote !== notes[j]) adjustedMidiNotes.push(snappedNote)
+      }
       return Model.uniqueNotes(snapped)
     }
-    if (notes.length === 1)
-      return [Model.nearestScaleNote(notes[0], keyRoot, scaleType)]
+    if (notes.length === 1) {
+      var fittedNote = Model.nearestScaleNote(notes[0], keyRoot, scaleType)
+      if (fittedNote !== notes[0]) adjustedMidiNotes = [fittedNote]
+      return [fittedNote]
+    }
     var fitted = Model.fitChordToScale(notes, keyRoot, scaleType)
     lastScaleShift = fitted.shift
+    if (fitted.shift !== 0) adjustedMidiNotes = fitted.notes.slice()
     return fitted.notes
   }
   function styleSuggestionText() {
@@ -238,7 +253,7 @@ Panel {
     }
     var notes = resolveScaleNotes(rawNotes)
     if (notes.length === 0) {
-      statusText = "Strict lock blocked " + (modifier !== ""
+      statusText = scaleLockModeName() + " blocked " + (modifier !== ""
         ? Model.noteClassName(midi) + " " + Model.qualityDisplayName(modifier)
         : Model.noteName(midi))
       keyArea.forceActiveFocus()
@@ -250,7 +265,6 @@ Panel {
     if (modifier !== "") {
       var playedRoot = scaleLockMode === "fit" ? midi + lastScaleShift : midi
       historyLabel = Model.noteClassName(playedRoot) + " " + Model.qualityDisplayName(modifier)
-      if (scaleLockMode === "nearest") historyLabel += " · Fit"
     }
     recordHistory(historyLabel)
     startNotes(notes)
@@ -270,13 +284,12 @@ Panel {
     var notes = resolveScaleNotes(rawNotes)
     if (notes.length === 0) {
       activeDegreeIndex = -1
-      statusText = "Strict lock blocked " + Model.chordDisplayName(chord.root, chord.quality)
+      statusText = scaleLockModeName() + " blocked " + Model.chordDisplayName(chord.root, chord.quality)
       return
     }
     activeChordNotes = notes
     var playedRoot = scaleLockMode === "fit" ? chord.root + lastScaleShift : chord.root
     var historyLabel = Model.chordDisplayName(playedRoot, chord.quality)
-    if (scaleLockMode === "nearest") historyLabel += " · Fit"
     recordHistory(historyLabel)
     startNotes(notes)
     statusText = chord.roman + " · " + historyLabel + " · " + notes.map(Model.noteName).join("  ")
@@ -301,6 +314,7 @@ Panel {
         audioProcess.write(JSON.stringify({ type: "note_off", note: activeChordNotes[i] }) + "\n")
     }
     activeChordNotes = []
+    adjustedMidiNotes = []
     activeMidi = -1
     activeDegreeIndex = -1
   }
@@ -608,7 +622,7 @@ Panel {
           width: parent.width
           height: Style.space(108)
           radius: Style.cornerRadius
-          color: "#111216"
+          color: root.pianoSurface
           clip: true
 
           readonly property real whiteKeyWidth: width / root.whiteKeys.length
@@ -622,14 +636,21 @@ Panel {
               required property int index
               readonly property int midi: 12 * (root.octave + 1) + modelData.offset
               readonly property bool scaleTone: root.scaleAllowed(midi)
+              readonly property bool adjusted: root.adjustedMidiNotes.indexOf(midi) !== -1
+              readonly property bool sounding: root.activeChordNotes.indexOf(midi) !== -1
               x: index * piano.whiteKeyWidth
               y: 0
               width: piano.whiteKeyWidth + 1
               height: piano.height
-              color: root.activeMidi === midi ? Color.accent : (scaleTone ? "#f4f1e8" : "#777981")
+              color: adjusted ? root.pianoAdjusted
+                : root.activeMidi === midi ? root.pianoPressed
+                : sounding ? Style.selectedStateColor(root.foreground, Color.accent, Color.urgent)
+                : scaleTone ? root.pianoWhite
+                : Qt.rgba(root.pianoMuted.r, root.pianoMuted.g, root.pianoMuted.b, 0.52)
               border.width: 1
-              border.color: "#303138"
+              border.color: Color.popups.border
               radius: index === 0 || index === root.whiteKeys.length - 1 ? Style.space(3) : 0
+              Behavior on color { ColorAnimation { duration: 90 } }
 
               Text {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -637,7 +658,8 @@ Panel {
                 anchors.bottomMargin: Style.space(4)
                 text: modelData.letter
                 visible: modelData.letter !== ""
-                color: root.activeMidi === parent.midi ? "#ffffff" : (parent.scaleTone ? "#1a1b20" : "#3f4148")
+                color: parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface
+                  : (parent.scaleTone ? root.pianoBlack : root.pianoSurface)
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.subtitle
                 font.bold: true
@@ -648,7 +670,7 @@ Panel {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Style.space(5)
                 text: Model.noteName(parent.midi)
-                color: root.activeMidi === parent.midi ? "#ffffff" : (parent.scaleTone ? "#676971" : "#474950")
+                color: parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface : root.pianoMuted
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
               }
@@ -667,22 +689,31 @@ Panel {
               required property var modelData
               readonly property int midi: 12 * (root.octave + 1) + modelData.offset
               readonly property bool scaleTone: root.scaleAllowed(midi)
+              readonly property bool adjusted: root.adjustedMidiNotes.indexOf(midi) !== -1
+              readonly property bool sounding: root.activeChordNotes.indexOf(midi) !== -1
               z: 2
               x: modelData.after * piano.whiteKeyWidth - piano.blackKeyWidth / 2
               y: 0
               width: piano.blackKeyWidth
               height: piano.blackKeyHeight
-              color: root.activeMidi === midi ? Color.accent : (scaleTone ? "#18191e" : "#4a4b52")
+              color: adjusted ? root.pianoAdjusted
+                : root.activeMidi === midi ? root.pianoPressed
+                : sounding ? Style.selectedStateColor(root.foreground, Color.accent, Color.urgent)
+                : scaleTone ? root.pianoBlack
+                : Qt.rgba(root.pianoMuted.r, root.pianoMuted.g, root.pianoMuted.b, 0.58)
               border.width: 1
-              border.color: root.activeMidi === midi ? Qt.lighter(Color.accent, 1.25) : "#050506"
+              border.color: adjusted || root.activeMidi === midi ? root.foreground : Color.popups.border
               radius: Style.space(3)
+              Behavior on color { ColorAnimation { duration: 90 } }
 
               Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: Style.space(7)
-                color: root.activeMidi === parent.midi ? Qt.darker(Color.accent, 1.15) : (parent.scaleTone ? "#0b0c0f" : "#36373d")
+                color: parent.adjusted ? Qt.darker(root.pianoAdjusted, 1.15)
+                  : root.activeMidi === parent.midi ? Qt.darker(root.pianoPressed, 1.15)
+                  : Qt.rgba(root.pianoSurface.r, root.pianoSurface.g, root.pianoSurface.b, 0.78)
                 radius: Style.space(2)
               }
               Text {
@@ -690,7 +721,8 @@ Panel {
                 anchors.bottom: blackNoteLabel.top
                 anchors.bottomMargin: Style.space(3)
                 text: modelData.letter
-                color: parent.scaleTone ? "#ffffff" : "#8c8e96"
+                color: parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface
+                  : (parent.scaleTone ? root.foreground : root.pianoMuted)
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
                 font.bold: true
@@ -701,7 +733,7 @@ Panel {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Style.space(6)
                 text: Model.noteName(parent.midi)
-                color: parent.scaleTone ? "#aeb0ba" : "#777983"
+                color: parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface : root.pianoMuted
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
               }

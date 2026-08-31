@@ -2,6 +2,14 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.2.0 — 2026-08-31
+
+- Renamed Nearest Note and Nearest Chord to the clearer Note Snap and Chord Snap.
+- Made Chord Snap preserve the full chord shape and reject voicings with no exact in-scale transposition.
+- Removed the internal `Fit` marker from chord history.
+- Added distinct theme-derived feedback for requested and scale-corrected piano keys.
+- Replaced the piano's fixed palette with the active Omarchy theme colors.
+
 ## 1.1.1 — 2026-08-31
 
 - Enabled Nearest Note scale lock by default so scale selection has an immediate effect.

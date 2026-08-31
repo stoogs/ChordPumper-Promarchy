@@ -42,23 +42,22 @@ function nearestScaleNote(note, root, scaleType) {
 }
 
 function fitChordToScale(notes, root, scaleType) {
-  var bestShift = 0
-  var bestMatches = -1
+  var bestShift = null
   var bestDistance = 99
   for (var shift = -6; shift <= 6; shift++) {
-    var matches = 0
+    var allFit = true
     for (var i = 0; i < notes.length; i++)
-      if (isInScale(notes[i] + shift, root, scaleType)) matches++
+      if (!isInScale(notes[i] + shift, root, scaleType)) { allFit = false; break }
     var distance = Math.abs(shift)
-    if (matches > bestMatches || (matches === bestMatches && distance < bestDistance)) {
+    if (allFit && distance < bestDistance) {
       bestShift = shift
-      bestMatches = matches
       bestDistance = distance
     }
   }
+  if (bestShift === null) return { notes: [], shift: 0, matches: 0 }
   var fitted = []
   for (var j = 0; j < notes.length; j++) fitted.push(notes[j] + bestShift)
-  return { notes: fitted, shift: bestShift, matches: bestMatches }
+  return { notes: fitted, shift: bestShift, matches: notes.length }
 }
 
 function uniqueNotes(notes) {
