@@ -69,7 +69,7 @@ Panel {
   }
   function chooseDegree(index) {
     selectedDegree = index
-    statusText = "Selected " + chords[index].roman + " · " + Model.chordFullName(chords[index].root, chords[index].quality)
+    statusText = "Selected " + chords[index].roman + " · " + Model.chordDisplayName(chords[index].root, chords[index].quality)
   }
   function modifierIndexForText(text) {
     return "cvbnm,./".indexOf(String(text).toLowerCase())
@@ -77,21 +77,21 @@ Panel {
   function beginTemporaryModifier(index) {
     temporaryModifierIndex = index
     modifier = modifiers[index]
-    statusText = "Hold " + modifierKeys[index] + " · " + Model.qualityFullName(modifier) + " shape armed"
+    statusText = "Hold " + modifierKeys[index] + " · " + Model.qualityDisplayName(modifier) + " shape armed"
   }
   function endTemporaryModifier(index) {
     if (temporaryModifierIndex !== index) return
     temporaryModifierIndex = -1
     modifier = lockedModifier
     statusText = lockedModifier !== ""
-      ? "Returned to locked " + Model.qualityFullName(lockedModifier) + " shape"
+      ? "Returned to locked " + Model.qualityDisplayName(lockedModifier) + " shape"
       : "Returned to single-note mode"
   }
   function toggleModifierLock(value) {
     lockedModifier = lockedModifier === value ? "" : value
     if (temporaryModifierIndex < 0) modifier = lockedModifier
     statusText = lockedModifier !== ""
-      ? "Locked " + Model.qualityFullName(lockedModifier) + " · every piano key now voices a chord"
+      ? "Locked " + Model.qualityDisplayName(lockedModifier) + " · every piano key now voices a chord"
       : "Modifier unlocked · piano returned to single notes"
   }
   function applyStyle(index) {
@@ -117,12 +117,12 @@ Panel {
     lockedModifier = modifiers[Math.floor(Math.random() * modifiers.length)]
     modifier = lockedModifier
     statusText = "Random · " + currentStyle.name + " · "
-      + Model.chordFullName(chords[selectedDegree].root, chords[selectedDegree].quality)
-      + " · " + Model.qualityFullName(lockedModifier) + " locked"
+      + Model.chordDisplayName(chords[selectedDegree].root, chords[selectedDegree].quality)
+      + " · " + Model.qualityDisplayName(lockedModifier) + " locked"
   }
   function styleSuggestionText() {
     var names = []
-    for (var i = 0; i < chords.length; i++) names.push(Model.chordFullName(chords[i].root, chords[i].quality))
+    for (var i = 0; i < chords.length; i++) names.push(Model.chordDisplayName(chords[i].root, chords[i].quality))
     return names.join("  •  ")
   }
   function progressionSpec() {
@@ -177,10 +177,12 @@ Panel {
         notes.push(midi + intervals[intervalIndex])
     }
     activeChordNotes = notes
-    recordNotes(notes)
+    recordHistory(modifier !== ""
+      ? Model.noteClassName(midi) + " " + Model.qualityDisplayName(modifier)
+      : Model.noteName(midi))
     startNotes(notes)
     statusText = modifier !== ""
-      ? "Playing " + Model.noteName(midi) + modifier + " · " + notes.map(Model.noteName).join("  ")
+      ? "Playing " + Model.noteClassName(midi) + " " + Model.qualityDisplayName(modifier) + " · " + notes.map(Model.noteName).join("  ")
       : "Playing " + Model.noteName(midi) + (audioReady ? "" : " · audio starting…")
     keyArea.forceActiveFocus()
   }
@@ -193,17 +195,16 @@ Panel {
     var chord = chords[index]
     var notes = Model.chordNotes(chord.root, chord.quality, octave)
     activeChordNotes = notes
-    recordNotes(notes)
+    recordHistory(Model.chordDisplayName(chord.root, chord.quality))
     startNotes(notes)
-    statusText = chord.roman + " · " + Model.chordFullName(chord.root, chord.quality) + " · " + notes.map(Model.noteName).join("  ")
+    statusText = chord.roman + " · " + Model.chordDisplayName(chord.root, chord.quality) + " · " + notes.map(Model.noteName).join("  ")
   }
   function releaseDegree(index) {
     if (activeDegreeIndex === index) stopActiveNotes()
   }
-  function recordNotes(notes) {
+  function recordHistory(label) {
     var nextHistory = noteHistory.slice()
-    for (var historyIndex = 0; historyIndex < notes.length; historyIndex++)
-      nextHistory.push(Model.noteName(notes[historyIndex]))
+    nextHistory.push(label)
     if (nextHistory.length > 12) nextHistory = nextHistory.slice(nextHistory.length - 12)
     noteHistory = nextHistory
   }
@@ -379,7 +380,7 @@ Panel {
               required property var modelData
               required property int index
               width: (content.width - Style.space(30)) / 6
-              text: (index + 1) + " · " + modelData.roman + "\n" + Model.chordFullName(modelData.root, modelData.quality)
+              text: (index + 1) + " · " + modelData.roman + "\n" + Model.chordDisplayName(modelData.root, modelData.quality)
               selected: root.selectedDegree === index || root.activeDegreeIndex === index
               bordered: true
               foreground: root.foreground
@@ -406,7 +407,7 @@ Panel {
               required property string modelData
               required property int index
               width: (content.width - Style.space(15)) / 4
-              text: root.modifierKeys[index] + " · " + Model.qualityFullName(modelData) + (root.lockedModifier === modelData ? "  ◆" : "")
+              text: root.modifierKeys[index] + " · " + Model.qualityDisplayName(modelData) + (root.lockedModifier === modelData ? "  ◆" : "")
               selected: root.modifier === modelData
               active: root.lockedModifier === modelData
               bordered: true

@@ -54,7 +54,7 @@ Add any new quality to all three locations:
 2. `Model.js` full-name definitions
 3. `engine/chordpumper_engine.py` MIDI interval definitions
 
-Display names must be written in full; do not expose unexplained quality codes in the interface.
+Display names should remain clear and compact. Use the established `Dom`, `Sus`, and `Dim` abbreviations for long qualities rather than exposing internal quality codes.
 
 ## Pull requests
 

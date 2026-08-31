@@ -86,7 +86,7 @@ Included styles:
 | Cinematic | Epic | Jazz | Neo-Soul |
 | Bossa Nova | Gospel | Reggae | Classical |
 
-Every style defines both its six progression chords and eight chord-shape choices. Chords are written in full in the interface for clarity.
+Every style defines both its six progression chords and eight chord-shape choices. The interface uses compact, familiar theory labels such as `Dom 7`, `Sus 4`, and `Dim 7` where full descriptions would obscure the controls.
 
 ## Random, Save, and MIDI
 

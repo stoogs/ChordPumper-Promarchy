@@ -60,8 +60,31 @@ function qualityFullName(quality) {
   return names[quality] || quality
 }
 
+function qualityDisplayName(quality) {
+  var names = {
+    "maj": "Major", "min": "Minor", "7": "Dom 7",
+    "maj7": "Major 7", "min7": "Minor 7",
+    "sus2": "Sus 2", "sus4": "Sus 4",
+    "dim": "Dim", "aug": "Aug", "add9": "Add 9",
+    "maj9": "Major 9", "min9": "Minor 9", "9": "Dom 9",
+    "11": "Dom 11", "min11": "Minor 11", "13": "Dom 13",
+    "dim7": "Dim 7", "6": "Major 6", "min6": "Minor 6",
+    "5": "Power 5", "7sus4": "Dom 7 Sus 4",
+    "m7b5": "Minor 7 ♭5", "maj7#11": "Major 7 ♯11"
+  }
+  return names[quality] || quality
+}
+
 function chordFullName(root, quality) {
   return NOTE_NAMES[modulo(root, 12)] + " " + qualityFullName(quality)
+}
+
+function chordDisplayName(root, quality) {
+  return NOTE_NAMES[modulo(root, 12)] + " " + qualityDisplayName(quality)
+}
+
+function noteClassName(midi) {
+  return NOTE_NAMES[modulo(midi, 12)]
 }
 
 function asciiNoteName(root) {
