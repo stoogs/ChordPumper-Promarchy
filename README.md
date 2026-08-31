@@ -132,6 +132,8 @@ When scale lock is active, available piano keys remain bright and unavailable ke
 
 The file can be imported into Bitwig, Reaper, Ardour, Ableton Live, Logic, or another MIDI-capable workstation. The visible Recent strip remains compact, but MIDI export retains the full session history.
 
+**Clear MIDI** starts a fresh take by clearing both the full export history and the visible Recent strip. It requires a second **Confirm clear** click within five seconds; otherwise the clear is cancelled and the take is kept.
+
 ## How it works
 
 The QML interface runs inside the existing Omarchy shell process. It starts the bundled Python engine as a child process and sends newline-delimited JSON note events over standard input. The engine controls FluidSynth, while its dependency-free MIDI writer exports the played-event history.

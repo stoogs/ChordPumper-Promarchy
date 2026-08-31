@@ -41,6 +41,7 @@ Panel {
   property var adjustedMidiNotes: []
   property var noteHistory: []
   property var playedEvents: []
+  property bool clearHistoryArmed: false
   property bool audioReady: false
   property int styleIndex: 0
   property bool stylePickerOpen: false
@@ -388,6 +389,35 @@ Panel {
     midiProcess.command = ["python3", enginePath, "midi", "--output", outputDir + "/" + midiFilename(),
       "--tempo", "110", "--events", JSON.stringify(playedEvents)]
     midiProcess.running = true
+  }
+  function requestClearHistory() {
+    if (playedEvents.length === 0) {
+      clearHistoryArmed = false
+      clearHistoryTimer.stop()
+      statusText = "MIDI history is already empty"
+      return
+    }
+    if (!clearHistoryArmed) {
+      clearHistoryArmed = true
+      clearHistoryTimer.restart()
+      statusText = "Clear all " + playedEvents.length + " played events? · click Confirm clear"
+      return
+    }
+    clearHistoryTimer.stop()
+    clearHistoryArmed = false
+    playedEvents = []
+    noteHistory = []
+    statusText = "MIDI history cleared · ready for a new take"
+  }
+
+  Timer {
+    id: clearHistoryTimer
+    interval: 5000
+    repeat: false
+    onTriggered: {
+      root.clearHistoryArmed = false
+      root.statusText = "Clear cancelled · MIDI history kept"
+    }
   }
 
   Process {
@@ -835,9 +865,20 @@ Panel {
         Row {
           width: parent.width; spacing: Style.space(8)
           Text {
-            width: parent.width - exportButton.width - parent.spacing
+            width: parent.width - clearHistoryButton.width - exportButton.width - parent.spacing * 2
             text: root.statusText; color: Qt.darker(root.foreground, 1.3); font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight
+          }
+          Button {
+            id: clearHistoryButton
+            text: root.clearHistoryArmed ? "Confirm clear" : "Clear MIDI"
+            selected: root.clearHistoryArmed
+            bordered: true
+            foreground: root.clearHistoryArmed ? Color.urgent : root.foreground
+            onClicked: {
+              root.requestClearHistory()
+              keyArea.forceActiveFocus()
+            }
           }
           Button {
             id: exportButton; text: "Export MIDI"; bordered: true; foreground: root.foreground

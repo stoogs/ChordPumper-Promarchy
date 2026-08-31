@@ -36,6 +36,7 @@ Then verify:
 - Style cycling with `<`
 - Random style, chord, and chord-shape selection
 - Empty-history handling and full played-history MIDI export
+- Clear MIDI confirmation, five-second cancellation, and new-take behavior
 - Shell restart and plugin re-enable
 
 Inspect runtime errors with:

@@ -2,6 +2,12 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.6.2 — 2026-08-31
+
+- Added a Clear MIDI control for starting a fresh take.
+- Required a second confirmation click within five seconds before deleting session history.
+- Made clearing reset both the complete MIDI event history and the visible Recent strip.
+
 ## 1.6.1 — 2026-08-31
 
 - Replaced the wide bar label with a compact piano icon and retained the full name in its tooltip.

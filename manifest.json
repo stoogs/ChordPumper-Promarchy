@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.stoogs.chordpumper-promarchy",
   "name": "ChordPumper Promarchy",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "author": "Stoogs",
   "license": "MIT",
   "description": "A keyboard-driven chord, harmony, and MIDI sketchpad for Omarchy",
