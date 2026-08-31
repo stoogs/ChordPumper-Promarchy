@@ -41,7 +41,7 @@ The plugin ID is `io.github.stoogs.chordpumper-promarchy`. If it is enabled but 
 omarchy bar put io.github.stoogs.chordpumper-promarchy --section center
 ```
 
-Click **♪ Chords** in the bar to open the instrument.
+Click the compact piano icon in the bar to open the instrument. Hover it to see the full ChordPumper Promarchy name.
 
 ## Controls
 

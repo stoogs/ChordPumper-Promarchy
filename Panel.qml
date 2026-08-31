@@ -227,11 +227,6 @@ Panel {
     if (fitted.shift !== 0) adjustedMidiNotes = fitted.notes.slice()
     return fitted.notes
   }
-  function styleSuggestionText() {
-    var names = []
-    for (var i = 0; i < chords.length; i++) names.push(Model.chordDisplayName(chords[i].root, chords[i].quality))
-    return names.join("  •  ")
-  }
   function numberChordIndex(key) {
     if (key >= Qt.Key_1 && key <= Qt.Key_9) return key - Qt.Key_1
     if (key === Qt.Key_0) return 9

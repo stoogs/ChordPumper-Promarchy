@@ -1,10 +1,6 @@
 .pragma library
 
 var NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]
-var MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11]
-var MAJOR_QUALITIES = ["maj", "min", "min", "maj", "maj", "min", "dim"]
-var ROMAN = ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
-var MINOR_STEPS = [0, 2, 3, 5, 7, 8, 10]
 var SCALE_STEPS = {
   "major": [0, 2, 4, 5, 7, 9, 11],
   "minor": [0, 2, 3, 5, 7, 8, 10],
@@ -81,23 +77,6 @@ function uniqueNotes(notes) {
   return result
 }
 
-function chordName(root, quality) {
-  if (quality === "maj") return NOTE_NAMES[modulo(root, 12)]
-  if (quality === "min") return NOTE_NAMES[modulo(root, 12)] + "m"
-  if (quality === "dim") return NOTE_NAMES[modulo(root, 12)] + "dim"
-  return NOTE_NAMES[modulo(root, 12)] + quality
-}
-
-function majorChords(root) {
-  var result = []
-  for (var i = 0; i < 7; i++) {
-    var chordRoot = modulo(root + MAJOR_STEPS[i], 12)
-    result.push({ degree: i, roman: ROMAN[i], root: chordRoot,
-      quality: MAJOR_QUALITIES[i], name: chordName(chordRoot, MAJOR_QUALITIES[i]) })
-  }
-  return result
-}
-
 function intervalsFor(quality) {
   var intervals = {
     "maj": [0, 4, 7], "min": [0, 3, 7], "7": [0, 4, 7, 10],
@@ -157,25 +136,12 @@ function noteClassName(midi) {
   return NOTE_NAMES[modulo(midi, 12)]
 }
 
-function asciiNoteName(root) {
-  var names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-  return names[modulo(root, 12)]
-}
-
 function chordNotes(root, quality, octave) {
   var base = 12 * (octave + 1) + root
   var intervals = intervalsFor(quality)
   var notes = []
   for (var i = 0; i < intervals.length; i++) notes.push(base + intervals[i])
   return notes
-}
-
-function suggestedDegrees(degree) {
-  var paths = [
-    [3, 4, 5, 1], [4, 5, 0, 3], [5, 3, 1, 4], [4, 0, 1, 5],
-    [0, 5, 3, 1], [3, 1, 4, 0], [0, 4, 2, 5]
-  ]
-  return paths[modulo(degree, 7)].slice()
 }
 
 function mappedMidi(text, octave) {

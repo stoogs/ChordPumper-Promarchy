@@ -29,6 +29,6 @@ Recommended listing values:
 - Category: **Widgets**
 - Tags: **Media**, **Bar**, **Quickshell**
 - Suggested missing tag: **Music**
-- Maintainer notes: Requires the official Arch packages `fluidsynth` and `soundfont-fluid`. The plugin runs a bundled standard-library Python process and FluidSynth with normal user permissions. It uses no network and writes only user-requested project or MIDI files under `~/Music/ChordPumper Promarchy`.
+- Maintainer notes: Requires the official Arch packages `fluidsynth` and `soundfont-fluid`. The plugin runs a bundled standard-library Python process and FluidSynth with normal user permissions. It uses no network and writes only user-requested MIDI files under `~/Music/ChordPumper Promarchy`.
 
 Automated validation checks the repository's current commit. Submit only after pushing the validated release commit.

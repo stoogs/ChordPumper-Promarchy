@@ -50,7 +50,7 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.vertical ? "♪" : "♪ ChordPumper"
+    text: "󰙽"
     labelVisible: true
     tooltipText: "Open ChordPumper Promarchy"
     onPressed: function(buttonCode) {

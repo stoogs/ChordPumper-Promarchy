@@ -2,6 +2,12 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.6.1 — 2026-08-31
+
+- Replaced the wide bar label with a compact piano icon and retained the full name in its tooltip.
+- Removed unused theory helpers left over from early prototypes.
+- Cleaned the release documentation for the MIDI-only v1 workflow.
+
 ## 1.6.0 — 2026-08-31
 
 - Changed MIDI export to include the complete session history of heard notes and chords in playback order.
