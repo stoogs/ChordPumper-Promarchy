@@ -8,6 +8,8 @@
 - README, MIT license, changelog, and removal instructions
 - Dependencies and unsandboxed permission boundary documented
 - Pixel-faithful `preview.png` captured from the live Omarchy shell
+- Native interactive installation prompts for left, center, or right placement; center is preselected
+- Pop is the verified startup style
 - No symlinks, SoundFonts, generated MIDI, saved projects, or bytecode
 
 ## Validate

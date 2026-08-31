@@ -37,11 +37,15 @@ The plugin bundles no SoundFont, samples, or third-party Python packages.
 omarchy plugin add https://github.com/stoogs/ChordPumper-Promarchy.git --enable
 ```
 
-The plugin ID is `io.github.stoogs.chordpumper-promarchy`. If it is enabled but not visible, place it in the center section:
+During this interactive installation, Omarchy asks whether the widget should be placed in the **left**, **center**, or **right** bar section. **Center** is preselected from the plugin manifest. The instrument opens with the **Pop** style and Core chord palette by default.
+
+The plugin ID is `io.github.stoogs.chordpumper-promarchy`. Placement can be changed later with, for example:
 
 ```sh
-omarchy bar put io.github.stoogs.chordpumper-promarchy --section center
+omarchy bar move io.github.stoogs.chordpumper-promarchy --section left
 ```
+
+Replace `left` with `center` or `right` as desired.
 
 Click the compact piano icon in the bar to open the instrument. Hover it to see the full ChordPumper Promarchy name.
 
