@@ -132,7 +132,7 @@ When scale lock is active, available piano keys remain bright and unavailable ke
 
 **Random** selects one of the 24 styles, a shuffled ten-chord palette, one named chord, and a compatible locked chord shape.
 
-**Export MIDI** writes every note and chord played during the current session, in order, to a format-0 Standard MIDI file. Each played gesture occupies one beat so the history is immediately editable as a sequence in a DAW. The filename includes the style, key and scale, chord set, date, and time, for example:
+**Export MIDI** writes every note and chord played during the current take, in order, to a format-0 Standard MIDI file. Each played gesture occupies one beat so the history is immediately editable as a sequence in a DAW. A take retains up to 4,096 gestures; after that, the oldest gesture is discarded. The filename includes the style, key and scale, chord set, date, and time, for example:
 
 ```text
 ~/Music/ChordPumper Promarchy/jazz-c-major-shuffle-2026-08-31-184512.mid
@@ -157,6 +157,9 @@ Omarchy plugins run unsandboxed with the current user's permissions. ChordPumper
 - Does not request elevated privileges.
 - Writes files only after Export MIDI is clicked.
 - Writes only beneath `~/Music/ChordPumper Promarchy` by default.
+- Publishes MIDI through a private temporary file without following symlinks or overwriting an existing filename.
+- Bounds control messages, MIDI values, event history, generated MIDI size, and retained synthesizer diagnostics.
+- Supervises FluidSynth as a process group and escalates from graceful exit to termination and a final kill/wait.
 - Does not modify Omarchy configuration directly.
 
 Audio dependencies are installed separately and explicitly by the user.
@@ -182,6 +185,7 @@ Validate the repository without installing it:
 ```sh
 omarchy plugin validate .
 python3 -m py_compile engine/chordpumper_engine.py
+python3 -m unittest discover -s tests -v
 ```
 
 The shell hot-reloads installed user plugin files. Follow [Contributing](CONTRIBUTING.md) for the development and test checklist.

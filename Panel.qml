@@ -40,6 +40,7 @@ Panel {
   property var adjustedMidiNotes: []
   property var noteHistory: []
   property var playedEvents: []
+  readonly property int maxPlayedEvents: 4096
   property bool clearHistoryArmed: false
   property bool audioReady: false
   property int styleIndex: 0
@@ -323,6 +324,8 @@ Panel {
     noteHistory = nextHistory
     var nextEvents = playedEvents.slice()
     nextEvents.push({ label: label, notes: notes.slice() })
+    if (nextEvents.length > maxPlayedEvents)
+      nextEvents = nextEvents.slice(nextEvents.length - maxPlayedEvents)
     playedEvents = nextEvents
   }
   function startNotes(notes) {
@@ -376,9 +379,12 @@ Panel {
       statusText = "Play something first · history is empty"
       return
     }
-    statusText = "Exporting " + playedEvents.length + " played events…"
+    var exportEvents = []
+    for (var i = 0; i < playedEvents.length; i++)
+      exportEvents.push({ notes: playedEvents[i].notes.slice(0, 16) })
+    statusText = "Exporting " + exportEvents.length + " played events…"
     midiProcess.command = ["python3", enginePath, "midi", "--output", outputDir + "/" + midiFilename(),
-      "--tempo", "110", "--events", JSON.stringify(playedEvents)]
+      "--tempo", "110", "--events", JSON.stringify(exportEvents)]
     midiProcess.running = true
   }
   function requestClearHistory() {
@@ -419,7 +425,7 @@ Panel {
     stdout: SplitParser { onRead: function(line) { root.handleAudioLine(line) } }
     stderr: SplitParser {
       onRead: function(line) {
-        if (String(line).trim() !== "") root.statusText = "Synth · " + String(line).trim()
+        if (String(line).trim() !== "") root.statusText = "Audio engine reported an error"
       }
     }
     onExited: function(exitCode) {
@@ -859,6 +865,7 @@ Panel {
             width: parent.width - clearHistoryButton.width - exportButton.width - parent.spacing * 2
             text: root.statusText; color: Qt.darker(root.foreground, 1.3); font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight
+            textFormat: Text.PlainText
           }
           Button {
             id: clearHistoryButton

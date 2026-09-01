@@ -19,6 +19,7 @@ Run before submitting a change:
 ```sh
 omarchy plugin validate .
 python3 -m py_compile engine/chordpumper_engine.py
+python3 -m unittest discover -s tests -v
 ```
 
 Then verify:
@@ -36,6 +37,7 @@ Then verify:
 - Style cycling with `<`
 - Random style, chord, and chord-shape selection
 - Empty-history handling and full played-history MIDI export
+- Atomic MIDI export and event/value limit regression tests
 - Clear MIDI confirmation, five-second cancellation, and new-take behavior
 - Shell restart and plugin re-enable
 

@@ -2,6 +2,14 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.6.4 — 2026-09-01
+
+- Made MIDI publication atomic, private, no-follow, and no-clobber.
+- Added strict bounds for take history, export arguments, MIDI values, control messages, and generated output.
+- Supervised FluidSynth as a process group with bounded diagnostic draining and complete quit/terminate/kill teardown.
+- Rendered runtime status explicitly as plain text and stopped forwarding raw synthesizer diagnostics.
+- Added regression tests for event validation and symlink-safe MIDI export.
+
 ## 1.6.3 — 2026-08-31
 
 - Added a pixel-faithful live marketplace preview.
