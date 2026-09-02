@@ -43,6 +43,10 @@ Panel {
   readonly property int maxPlayedEvents: 4096
   property bool clearHistoryArmed: false
   property bool audioReady: false
+  property string audioBackendPreference: "auto"
+  property string activeAudioBackend: ""
+  property bool proAudioAvailable: false
+  property bool audioRestarting: false
   property int styleIndex: 0
   property bool stylePickerOpen: false
   property string chordPaletteMode: "core"
@@ -98,6 +102,29 @@ Panel {
     root.controller.hide()
   }
   function toggle() { if (root.opened) close(); else open() }
+  function selectAudioBackend(backend) {
+    if (backend === activeAudioBackend && audioReady) {
+      statusText = backend === "fluid" ? "Pro piano is active" : "Basic keys are active"
+      keyArea.forceActiveFocus()
+      return
+    }
+    if (backend === "fluid" && !proAudioAvailable) {
+      statusText = "Pro piano is not installed · follow the GitHub README to enhance the sound"
+      keyArea.forceActiveFocus()
+      return
+    }
+    stopActiveNotes()
+    audioReady = false
+    audioBackendPreference = backend
+    audioRestarting = true
+    statusText = backend === "fluid" ? "Starting Pro piano…" : "Starting Basic keys…"
+    if (audioProcess.running) audioProcess.running = false
+    else {
+      audioRestarting = false
+      audioProcess.running = true
+    }
+    keyArea.forceActiveFocus()
+  }
   function switchPanel(direction) {
     if (root.bar && typeof root.bar.switchPanelFrom === "function")
       return root.bar.switchPanelFrom(root.barIdentity, direction)
@@ -364,7 +391,13 @@ Panel {
       var message = JSON.parse(String(line))
       if (message.type === "ready") {
         audioReady = true
-        statusText = "Audio ready · Acoustic Grand Piano"
+        activeAudioBackend = String(message.backend || "fluid")
+        proAudioAvailable = message.proAvailable === true
+        statusText = activeAudioBackend === "fluid"
+          ? "Audio ready · Pro Acoustic Grand Piano"
+          : proAudioAvailable
+            ? "Audio ready · Basic Keys · Pro piano available"
+            : "Audio ready · Basic Keys · follow the GitHub README to enhance the sound"
       } else if (message.type === "error") {
         audioReady = false
         statusText = "Audio unavailable · " + message.message
@@ -434,7 +467,7 @@ Panel {
 
   Process {
     id: audioProcess
-    command: ["/usr/bin/python3", root.enginePath, "serve"]
+    command: ["/usr/bin/python3", root.enginePath, "serve", "--backend", root.audioBackendPreference]
     running: true
     stdinEnabled: true
     stdout: SplitParser { onRead: function(line) { root.handleAudioLine(line) } }
@@ -445,7 +478,13 @@ Panel {
     }
     onExited: function(exitCode) {
       root.audioReady = false
-      if (exitCode !== 0) root.statusText = "Audio engine stopped · install FluidSynth and restart the shell"
+      root.activeAudioBackend = ""
+      if (root.audioRestarting) {
+        root.audioRestarting = false
+        Qt.callLater(function() { audioProcess.running = true })
+        return
+      }
+      if (exitCode !== 0) root.statusText = "Audio engine stopped · restart the shell or see GitHub troubleshooting"
     }
   }
 
@@ -503,6 +542,25 @@ Panel {
             id: headerControls
             spacing: Style.space(6)
             anchors.verticalCenter: parent.verticalCenter
+            Row {
+              spacing: 0
+              Button {
+                text: "Basic"
+                selected: root.activeAudioBackend === "basic"
+                bordered: true
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onClicked: root.selectAudioBackend("basic")
+              }
+              Button {
+                text: "Pro"
+                selected: root.activeAudioBackend === "fluid"
+                bordered: true
+                foreground: root.proAudioAvailable ? root.foreground : root.pianoMuted
+                fontFamily: root.fontFamily
+                onClicked: root.selectAudioBackend("fluid")
+              }
+            }
             Button {
               text: root.currentStyle.name + "  ▾"
               bordered: true

@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import argparse
+from array import array
 from collections import deque
 import json
+import math
 import os
 import pwd
+import queue
 import re
 import secrets
 import signal
@@ -27,8 +30,13 @@ MAX_MIDI_BYTES = 4 * 1024 * 1024
 MAX_SYNTH_LOG_LINES = 64
 MAX_SYNTH_LOG_LINE_CHARS = 512
 TRUSTED_FLUIDSYNTH = Path("/usr/bin/fluidsynth")
+TRUSTED_PW_CAT = Path("/usr/bin/pw-cat")
 EXPORT_DIRECTORY_PARTS = ("Music", "ChordPumper Promarchy")
 EXPORT_FILENAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,199}\.mid")
+BASIC_SAMPLE_RATE = 48_000
+BASIC_CHANNELS = 2
+BASIC_CHUNK_FRAMES = 384
+MAX_BASIC_VOICES = 32
 
 def variable_length(value: int) -> bytes:
     buffer = value & 0x7F
@@ -200,19 +208,36 @@ def find_soundfont() -> str:
     raise RuntimeError("no SoundFont found; install soundfont-fluid")
 
 
-def trusted_fluidsynth() -> str:
+def trusted_packaged_executable(path: Path, display_name: str) -> str:
     try:
-        details = TRUSTED_FLUIDSYNTH.stat()
+        details = path.stat()
     except FileNotFoundError as error:
-        raise RuntimeError("FluidSynth is not installed at /usr/bin/fluidsynth") from error
+        raise RuntimeError(f"{display_name} is unavailable at {path}") from error
     if (
         not stat.S_ISREG(details.st_mode)
         or details.st_uid != 0
         or details.st_mode & 0o022
         or not details.st_mode & stat.S_IXUSR
     ):
-        raise RuntimeError("/usr/bin/fluidsynth is not a trusted packaged executable")
-    return str(TRUSTED_FLUIDSYNTH)
+        raise RuntimeError(f"{path} is not a trusted packaged executable")
+    return str(path)
+
+
+def trusted_fluidsynth() -> str:
+    return trusted_packaged_executable(TRUSTED_FLUIDSYNTH, "FluidSynth")
+
+
+def trusted_pw_cat() -> str:
+    return trusted_packaged_executable(TRUSTED_PW_CAT, "PipeWire playback")
+
+
+def pro_audio_available() -> bool:
+    try:
+        trusted_fluidsynth()
+        find_soundfont()
+    except RuntimeError:
+        return False
+    return True
 
 
 def process_group_members(group_id: int, leader_pid: int) -> set[int]:
@@ -264,6 +289,7 @@ def stop_process_group(
     graceful_shutdown,
     stderr_thread: threading.Thread | None,
     *,
+    process_name: str = "audio backend",
     graceful_timeout: float = 2.0,
     terminate_timeout: float = 2.0,
     kill_timeout: float = 2.0,
@@ -284,12 +310,12 @@ def stop_process_group(
         signal_process_group(group_id, signal.SIGKILL)
         group_stopped = wait_for_process_group(leader_pid, group_id, kill_timeout)
     if not group_stopped:
-        raise RuntimeError("FluidSynth process group did not stop after SIGKILL")
+        raise RuntimeError(f"{process_name} process group did not stop after SIGKILL")
 
     try:
         process.wait(timeout=1.0)
     except (subprocess.TimeoutExpired, OSError) as error:
-        raise RuntimeError("FluidSynth leader could not be reaped") from error
+        raise RuntimeError(f"{process_name} leader could not be reaped") from error
     finally:
         if stderr_thread is not None:
             stderr_thread.join(timeout=1.0)
@@ -301,10 +327,228 @@ def stop_process_group(
             if stream is not None and not stream.closed:
                 stream.close()
         if stderr_thread is not None and stderr_thread.is_alive():
-            raise RuntimeError("FluidSynth diagnostic drain did not stop")
+            raise RuntimeError(f"{process_name} diagnostic drain did not stop")
 
 
-def serve() -> int:
+def bounded_int(message: dict, name: str, minimum: int, maximum: int, default=None) -> int:
+    value = message.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be an integer")
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+def read_control_line() -> dict | None:
+    line = sys.stdin.readline(MAX_CONTROL_LINE_BYTES + 1)
+    if not line:
+        return None
+    if len(line.encode("utf-8")) > MAX_CONTROL_LINE_BYTES:
+        while line and not line.endswith("\n"):
+            line = sys.stdin.readline(MAX_CONTROL_LINE_BYTES + 1)
+        raise ValueError("control message exceeds 4096 bytes")
+    message = json.loads(line)
+    if not isinstance(message, dict):
+        raise ValueError("control message must be an object")
+    return message
+
+
+def serve_basic(pro_available: bool) -> int:
+    executable = trusted_pw_cat()
+    shutdown_signals = {signal.SIGINT, signal.SIGTERM}
+    old_sigint = signal.getsignal(signal.SIGINT)
+    old_sigterm = signal.getsignal(signal.SIGTERM)
+    previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, shutdown_signals)
+    try:
+        player = subprocess.Popen(
+            [
+                executable,
+                "--playback",
+                "--raw",
+                "--rate", str(BASIC_SAMPLE_RATE),
+                "--channels", str(BASIC_CHANNELS),
+                "--format", "s16",
+                "--latency", str(BASIC_CHUNK_FRAMES),
+                "-",
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except BaseException:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+        raise
+
+    audio_commands: queue.Queue[tuple] = queue.Queue(maxsize=256)
+    writer_stop = threading.Event()
+    writer_errors: deque[str] = deque(maxlen=1)
+    player_log: deque[str] = deque(maxlen=MAX_SYNTH_LOG_LINES)
+    stderr_thread: threading.Thread | None = None
+    writer_thread: threading.Thread | None = None
+
+    def request_shutdown(signum, _frame) -> None:
+        raise SystemExit(128 + signum)
+
+    def drain_player_stderr() -> None:
+        if player.stderr is None:
+            return
+        while True:
+            chunk = player.stderr.read(MAX_SYNTH_LOG_LINE_CHARS)
+            if not chunk:
+                break
+            player_log.append(chunk.decode("utf-8", errors="replace").rstrip())
+
+    def write_basic_audio() -> None:
+        voices: dict[int, dict[str, float | bool]] = {}
+        try:
+            while not writer_stop.is_set():
+                while True:
+                    try:
+                        item = audio_commands.get_nowait()
+                    except queue.Empty:
+                        break
+                    kind = item[0]
+                    if kind == "note_on":
+                        note, velocity = item[1], item[2]
+                        if note not in voices and len(voices) >= MAX_BASIC_VOICES:
+                            voices.pop(next(iter(voices)))
+                        voices[note] = {
+                            "phase": 0.0,
+                            "age": 0.0,
+                            "velocity": velocity / 127.0,
+                            "released": False,
+                            "release": 1.0,
+                        }
+                    elif kind == "note_off" and item[1] in voices:
+                        voices[item[1]]["released"] = True
+                    elif kind == "all_off":
+                        for voice in voices.values():
+                            voice["released"] = True
+
+                pcm = array("h")
+                remove_notes: set[int] = set()
+                voice_scale = 0.34 / max(1.0, math.sqrt(len(voices)))
+                for _frame in range(BASIC_CHUNK_FRAMES):
+                    mixed = 0.0
+                    for note, voice in voices.items():
+                        phase = float(voice["phase"])
+                        age = float(voice["age"])
+                        release = float(voice["release"])
+                        attack = min(1.0, age / (BASIC_SAMPLE_RATE * 0.008))
+                        decay = 0.14 + 0.86 * math.exp(-age / (BASIC_SAMPLE_RATE * 2.8))
+                        tone = (
+                            math.sin(phase)
+                            + 0.38 * math.sin(phase * 2.0)
+                            + 0.16 * math.sin(phase * 3.0)
+                            + 0.06 * math.sin(phase * 4.0)
+                        ) / 1.6
+                        mixed += tone * attack * decay * release * float(voice["velocity"])
+                        frequency = 440.0 * (2.0 ** ((note - 69) / 12.0))
+                        voice["phase"] = (phase + 2.0 * math.pi * frequency / BASIC_SAMPLE_RATE) % (2.0 * math.pi)
+                        voice["age"] = age + 1.0
+                        if bool(voice["released"]):
+                            release *= 0.99955
+                            voice["release"] = release
+                            if release < 0.001:
+                                remove_notes.add(note)
+                    sample = max(-32767, min(32767, round(mixed * voice_scale * 32767)))
+                    pcm.append(sample)
+                    pcm.append(sample)
+                for note in remove_notes:
+                    voices.pop(note, None)
+                if player.stdin is None:
+                    raise RuntimeError("PipeWire playback channel is unavailable")
+                player.stdin.write(pcm.tobytes())
+                player.stdin.flush()
+        except (BrokenPipeError, OSError, RuntimeError) as error:
+            if not writer_stop.is_set():
+                writer_errors.append(str(error)[:256])
+        finally:
+            writer_stop.set()
+
+    def queue_audio(item: tuple) -> None:
+        if writer_errors:
+            raise RuntimeError("Basic audio output stopped")
+        try:
+            audio_commands.put_nowait(item)
+        except queue.Full as error:
+            raise ValueError("basic audio command queue is full") from error
+
+    def graceful_stop() -> None:
+        writer_stop.set()
+        if writer_thread is not None:
+            writer_thread.join(timeout=1.0)
+        if player.stdin is not None and not player.stdin.closed:
+            player.stdin.close()
+
+    try:
+        if player.stdin is None or player.stderr is None:
+            raise RuntimeError("could not open PipeWire supervision channels")
+        stderr_thread = threading.Thread(target=drain_player_stderr, daemon=True)
+        writer_thread = threading.Thread(target=write_basic_audio, daemon=True)
+        stderr_thread.start()
+        writer_thread.start()
+        signal.signal(signal.SIGINT, request_shutdown)
+        signal.signal(signal.SIGTERM, request_shutdown)
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+        print(json.dumps({
+            "type": "ready",
+            "backend": "basic",
+            "proAvailable": pro_available,
+        }), flush=True)
+        requested_notes: set[int] = set()
+        while True:
+            try:
+                message = read_control_line()
+                if message is None:
+                    break
+                kind = message.get("type")
+                if kind == "note_on":
+                    note = bounded_int(message, "note", 0, 127)
+                    velocity = bounded_int(message, "velocity", 1, 127, 100)
+                    if note not in requested_notes and len(requested_notes) >= MAX_BASIC_VOICES:
+                        raise ValueError(f"basic audio supports at most {MAX_BASIC_VOICES} active voices")
+                    queue_audio(("note_on", note, velocity))
+                    requested_notes.add(note)
+                elif kind == "note_off":
+                    note = bounded_int(message, "note", 0, 127)
+                    queue_audio(("note_off", note))
+                    requested_notes.discard(note)
+                elif kind == "all_off":
+                    queue_audio(("all_off",))
+                    requested_notes.clear()
+                elif kind == "program":
+                    bounded_int(message, "program", 0, 127)
+                elif kind == "quit":
+                    break
+                else:
+                    raise ValueError("unsupported control message type")
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                print(json.dumps({"type": "error", "message": str(error)[:256]}), flush=True)
+    finally:
+        signal.pthread_sigmask(signal.SIG_BLOCK, shutdown_signals)
+        try:
+            stop_process_group(
+                player,
+                graceful_stop,
+                stderr_thread,
+                process_name="PipeWire player",
+            )
+        finally:
+            writer_stop.set()
+            if writer_thread is not None:
+                writer_thread.join(timeout=1.0)
+            writer_alive = writer_thread is not None and writer_thread.is_alive()
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+            signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+            if writer_alive:
+                raise RuntimeError("Basic audio writer did not stop")
+    return 0
+
+
+def serve_fluid() -> int:
     executable = trusted_fluidsynth()
     soundfont = find_soundfont()
     shutdown_signals = {signal.SIGINT, signal.SIGTERM}
@@ -345,14 +589,6 @@ def serve() -> int:
         synth.stdin.write(value + "\n")
         synth.stdin.flush()
 
-    def bounded_int(message: dict, name: str, minimum: int, maximum: int, default=None) -> int:
-        value = message.get(name, default)
-        if isinstance(value, bool) or not isinstance(value, int):
-            raise ValueError(f"{name} must be an integer")
-        if not minimum <= value <= maximum:
-            raise ValueError(f"{name} must be between {minimum} and {maximum}")
-        return value
-
     def graceful_stop() -> None:
         if synth.stdin is None:
             return
@@ -372,19 +608,17 @@ def serve() -> int:
         signal.signal(signal.SIGTERM, request_shutdown)
         signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
         command("prog 0 0")
-        print(json.dumps({"type": "ready", "soundfont": soundfont}), flush=True)
+        print(json.dumps({
+            "type": "ready",
+            "backend": "fluid",
+            "proAvailable": True,
+            "soundfont": soundfont,
+        }), flush=True)
         while True:
-            line = sys.stdin.readline(MAX_CONTROL_LINE_BYTES + 1)
-            if not line:
-                break
             try:
-                if len(line.encode("utf-8")) > MAX_CONTROL_LINE_BYTES:
-                    while line and not line.endswith("\n"):
-                        line = sys.stdin.readline(MAX_CONTROL_LINE_BYTES + 1)
-                    raise ValueError("control message exceeds 4096 bytes")
-                message = json.loads(line)
-                if not isinstance(message, dict):
-                    raise ValueError("control message must be an object")
+                message = read_control_line()
+                if message is None:
+                    break
                 kind = message.get("type")
                 if kind == "note_on":
                     note = bounded_int(message, "note", 0, 127)
@@ -405,12 +639,31 @@ def serve() -> int:
     finally:
         signal.pthread_sigmask(signal.SIG_BLOCK, shutdown_signals)
         try:
-            stop_process_group(synth, graceful_stop, stderr_thread)
+            stop_process_group(
+                synth,
+                graceful_stop,
+                stderr_thread,
+                process_name="FluidSynth",
+            )
         finally:
             signal.signal(signal.SIGINT, old_sigint)
             signal.signal(signal.SIGTERM, old_sigterm)
             signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
     return 0
+
+
+def serve(backend: str) -> int:
+    pro_available = pro_audio_available()
+    selected = "fluid" if backend == "auto" and pro_available else backend
+    if selected == "auto":
+        selected = "basic"
+    if selected == "fluid":
+        if not pro_available:
+            raise RuntimeError("Pro audio requires FluidSynth and the FluidR3 SoundFont")
+        return serve_fluid()
+    if selected == "basic":
+        return serve_basic(pro_available)
+    raise RuntimeError("unsupported audio backend")
 
 
 def main() -> int:
@@ -419,11 +672,12 @@ def main() -> int:
     parser.add_argument("--output")
     parser.add_argument("--tempo", type=int, default=110)
     parser.add_argument("--events")
+    parser.add_argument("--backend", choices=("auto", "basic", "fluid"), default="auto")
     args = parser.parse_args()
 
     if args.action == "serve":
         try:
-            return serve()
+            return serve(args.backend)
         except RuntimeError as error:
             print(json.dumps({"type": "error", "message": str(error)}), flush=True)
             return 1

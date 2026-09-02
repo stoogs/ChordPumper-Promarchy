@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import signal
@@ -7,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from engine.chordpumper_engine import (
@@ -16,6 +18,8 @@ from engine.chordpumper_engine import (
     midi_bytes,
     parse_events,
     process_group_members,
+    serve,
+    serve_basic,
     stop_process_group,
 )
 
@@ -148,6 +152,48 @@ class ProcessGroupTests(unittest.TestCase):
                 leader.wait(timeout=1)
             except subprocess.TimeoutExpired:
                 pass
+
+
+class AudioBackendTests(unittest.TestCase):
+    def test_auto_prefers_pro_when_available(self):
+        with (
+            mock.patch("engine.chordpumper_engine.pro_audio_available", return_value=True),
+            mock.patch("engine.chordpumper_engine.serve_fluid", return_value=17) as fluid,
+            mock.patch("engine.chordpumper_engine.serve_basic") as basic,
+        ):
+            self.assertEqual(serve("auto"), 17)
+            fluid.assert_called_once_with()
+            basic.assert_not_called()
+
+    def test_auto_falls_back_to_basic_without_pro(self):
+        with (
+            mock.patch("engine.chordpumper_engine.pro_audio_available", return_value=False),
+            mock.patch("engine.chordpumper_engine.serve_basic", return_value=23) as basic,
+            mock.patch("engine.chordpumper_engine.serve_fluid") as fluid,
+        ):
+            self.assertEqual(serve("auto"), 23)
+            basic.assert_called_once_with(False)
+            fluid.assert_not_called()
+
+    def test_basic_backend_rejects_more_than_32_active_voices(self):
+        fake_player = "#!/usr/bin/python3\nimport sys\nsys.stdin.buffer.read()\n"
+        control_lines = [
+            json.dumps({"type": "note_on", "note": note, "velocity": 100})
+            for note in range(33)
+        ]
+        control_lines.append(json.dumps({"type": "quit"}))
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            executable = Path(temporary_directory) / "fake-pw-cat"
+            executable.write_text(fake_player)
+            executable.chmod(0o700)
+            output = io.StringIO()
+            with (
+                mock.patch("engine.chordpumper_engine.trusted_pw_cat", return_value=str(executable)),
+                mock.patch("sys.stdin", io.StringIO("\n".join(control_lines) + "\n")),
+                mock.patch("sys.stdout", output),
+            ):
+                self.assertEqual(serve_basic(False), 0)
+            self.assertIn("basic audio supports at most 32 active voices", output.getvalue())
 
 
 if __name__ == "__main__":

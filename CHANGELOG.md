@@ -2,6 +2,14 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.7.0 — 2026-09-02
+
+- Added a zero-setup Basic Keys synthesizer using Omarchy's packaged PipeWire playback tool.
+- Kept the richer FluidSynth Acoustic Grand Piano as an automatically detected optional Pro engine.
+- Added a compact Basic / Pro selector with clear optional-upgrade guidance.
+- Bounded Basic synthesis voices, command queues, PCM output, diagnostics, and player teardown.
+- Moved the one-command install to the top of the README and made the optional Pro command prominent.
+
 ## 1.6.5 — 2026-09-02
 
 - Bound Python and FluidSynth execution to trusted packaged absolute paths.

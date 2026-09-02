@@ -6,7 +6,7 @@
 - `manifest.json` at repository root
 - Namespaced ID: `io.github.stoogs.chordpumper-promarchy`
 - README, MIT license, changelog, and removal instructions
-- Dependencies and unsandboxed permission boundary documented
+- Zero-setup Basic audio, optional Pro dependencies, and unsandboxed permission boundary documented
 - Pixel-faithful `preview.png` captured from the live Omarchy shell
 - Native interactive installation prompts for left, center, or right placement; center is preselected
 - Pop is the verified startup style
@@ -32,6 +32,6 @@ Recommended listing values:
 - Category: **Widgets**
 - Tags: **Media**, **Bar**, **Quickshell**
 - Suggested missing tag: **Music**
-- Maintainer notes: Requires the official Arch packages `fluidsynth` and `soundfont-fluid`. The plugin runs a bundled standard-library Python process and FluidSynth with normal user permissions. It uses no network and writes only user-requested MIDI files under `~/Music/ChordPumper Promarchy`.
+- Maintainer notes: Basic audio requires no additional setup and uses Omarchy's packaged `/usr/bin/pw-cat`. The optional Pro piano uses the official Arch `fluidsynth` and `soundfont-fluid` packages when already installed. The plugin runs a bundled standard-library Python process with normal user permissions, uses no network, and writes only user-requested MIDI files under `~/Music/ChordPumper Promarchy`.
 
 Automated validation checks the repository's current commit. Submit only after pushing the validated release commit.

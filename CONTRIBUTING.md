@@ -5,7 +5,7 @@ Contributions, new musical styles, bug reports, and accessibility improvements a
 ## Development setup
 
 1. Use an up-to-date Omarchy installation.
-2. Install `fluidsynth` and `soundfont-fluid` with `omarchy pkg add`.
+2. Use Omarchy's standard PipeWire setup for Basic audio. Optionally install `fluidsynth` and `soundfont-fluid` with `omarchy pkg add` to test Pro audio.
 3. Fork and clone this repository.
 4. Install the fork with `omarchy plugin add <your-git-url> --enable`.
 5. Edit the installed user-owned copy under `~/.config/omarchy/plugins/io.github.stoogs.chordpumper-promarchy/` while testing.
@@ -26,6 +26,7 @@ Then verify:
 
 - Bar click, shell summon, Escape, and shell hide
 - Physical and mouse note-on/note-off
+- Basic/Pro switching, automatic fallback, and unavailable-Pro guidance
 - No stuck notes after closing the panel
 - All 24 style choices
 - `1–9` and `0` chord playback

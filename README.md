@@ -4,9 +4,35 @@ ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad fo
 
 ![ChordPumper Promarchy running in the Omarchy shell](preview.png)
 
+## Install — one command
+
+```sh
+omarchy plugin add https://github.com/stoogs/ChordPumper-Promarchy.git --enable
+```
+
+That is the complete installation. ChordPumper works immediately with its zero-setup **Basic Keys** sound through the PipeWire audio tools already supplied by Omarchy. During installation, Omarchy asks whether the widget belongs in the **left**, **center**, or **right** bar section; **center** is preselected.
+
+### Optional Pro piano
+
+For the richer Acoustic Grand Piano sound, install the optional FluidSynth packages:
+
+```sh
+omarchy pkg add fluidsynth soundfont-fluid
+```
+
+Restart the Omarchy shell after installation:
+
+```sh
+omarchy restart shell
+```
+
+ChordPumper detects them automatically and starts in **Pro** mode. Use the compact **Basic / Pro** selector in the panel to compare sounds. If Pro is unavailable, the panel points back to these instructions; every other feature, including MIDI export, remains available.
+
 ## Features
 
-- Low-latency FluidSynth playback through PipeWire
+- Zero-setup Basic Keys synthesis through Omarchy's existing PipeWire tools
+- Automatically detected optional FluidSynth Acoustic Grand Piano
+- In-panel Basic / Pro audio selector
 - One-octave computer-keyboard piano with mouse support
 - 24 musical style palettes
 - Ten playable, style-aware progression chords
@@ -16,28 +42,13 @@ ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad fo
 - Full played-history MIDI export
 - Theme-aware Omarchy panel and bar widget
 
-## Requirements
+## Built-in requirements
 
 - Omarchy with the Quattro plugin runtime
 - Python 3
-- FluidSynth
-- FluidR3 General MIDI SoundFont
+- PipeWire and `pw-cat`, supplied by Omarchy
 
-Install the audio dependencies through Omarchy:
-
-```sh
-omarchy pkg add fluidsynth soundfont-fluid
-```
-
-The plugin bundles no SoundFont, samples, or third-party Python packages.
-
-## Install
-
-```sh
-omarchy plugin add https://github.com/stoogs/ChordPumper-Promarchy.git --enable
-```
-
-During this interactive installation, Omarchy asks whether the widget should be placed in the **left**, **center**, or **right** bar section. **Center** is preselected from the plugin manifest. The instrument opens with the **Pop** style and Core chord palette by default.
+The plugin bundles no SoundFont, samples, native binaries, or third-party Python packages. FluidSynth and FluidR3 are optional enhancements, not installation requirements. The instrument opens with the **Pop** style and Core chord palette by default.
 
 The plugin ID is `io.github.stoogs.chordpumper-promarchy`. Placement can be changed later with, for example:
 
@@ -59,6 +70,8 @@ Click the compact piano icon in the bar to open the instrument. Hover it to see 
 | Black notes | `W E T Y U` |
 | Octave down / up | `Z` / `X` |
 | Close panel | `Escape` |
+
+The **Basic / Pro** selector changes audio engines without affecting the current musical settings or MIDI take. Auto-detection selects Pro when the trusted system FluidSynth executable and FluidR3 SoundFont are present; otherwise Basic is selected.
 
 ### Style chords
 
@@ -144,7 +157,7 @@ The file can be imported into Bitwig, Reaper, Ardour, Ableton Live, Logic, or an
 
 ## How it works
 
-The QML interface runs inside the existing Omarchy shell process. It starts the bundled Python engine as a child process and sends newline-delimited JSON note events over standard input. The engine controls FluidSynth, while its dependency-free MIDI writer exports the played-event history.
+The QML interface runs inside the existing Omarchy shell process. It starts the bundled Python engine as a child process and sends newline-delimited JSON note events over standard input. The engine either synthesizes Basic Keys audio into Omarchy's packaged PipeWire player or controls the optional FluidSynth Pro piano. Its dependency-free MIDI writer exports the played-event history.
 
 See [Architecture](docs/architecture.md) for the component and security model.
 
@@ -152,17 +165,17 @@ See [Architecture](docs/architecture.md) for the component and security model.
 
 Omarchy plugins run unsandboxed with the current user's permissions. ChordPumper Promarchy:
 
-- Invokes its bundled engine with `/usr/bin/python3` and validates the packaged `/usr/bin/fluidsynth` executable before use.
+- Invokes its bundled engine with `/usr/bin/python3`, validates Omarchy's packaged `/usr/bin/pw-cat`, and validates `/usr/bin/fluidsynth` before optional Pro use.
 - Does not use the network.
 - Does not request elevated privileges.
 - Writes files only after Export MIDI is clicked.
 - Writes only beneath `~/Music/ChordPumper Promarchy` by default.
 - Walks the fixed MIDI export tree from the account home descriptor, rejecting symlinks at every component, then publishes through a private temporary file without overwriting an existing filename.
 - Bounds control messages, MIDI values, event history, generated MIDI size, and retained synthesizer diagnostics.
-- Supervises FluidSynth as a process group and escalates from graceful exit to termination and a final kill/wait.
+- Supervises the selected audio player as a process group and escalates from graceful exit to termination and a final kill/wait.
 - Does not modify Omarchy configuration directly.
 
-Audio dependencies are installed separately and explicitly by the user.
+Optional Pro audio packages are installed separately and explicitly by the user. Basic audio requires no additional setup.
 
 ## Remove
 
@@ -170,7 +183,7 @@ Audio dependencies are installed separately and explicitly by the user.
 omarchy plugin remove io.github.stoogs.chordpumper-promarchy
 ```
 
-If no other software needs the optional audio packages, they can also be removed:
+If no other software needs the optional Pro audio packages, they can also be removed:
 
 ```sh
 omarchy pkg drop fluidsynth soundfont-fluid
