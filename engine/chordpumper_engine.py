@@ -5,16 +5,18 @@ from __future__ import annotations
 
 import argparse
 from collections import deque
-import glob
 import json
 import os
+import pwd
+import re
 import secrets
 import signal
-import shutil
+import stat
 import struct
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 MAX_EVENTS = 4096
@@ -24,6 +26,9 @@ MAX_CONTROL_LINE_BYTES = 4096
 MAX_MIDI_BYTES = 4 * 1024 * 1024
 MAX_SYNTH_LOG_LINES = 64
 MAX_SYNTH_LOG_LINE_CHARS = 512
+TRUSTED_FLUIDSYNTH = Path("/usr/bin/fluidsynth")
+EXPORT_DIRECTORY_PARTS = ("Music", "ChordPumper Promarchy")
+EXPORT_FILENAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,199}\.mid")
 
 def variable_length(value: int) -> bytes:
     buffer = value & 0x7F
@@ -96,17 +101,54 @@ def midi_bytes(tempo: int, events: list[list[int]]) -> bytes:
     return header + b"MTrk" + struct.pack(">I", len(track)) + bytes(track)
 
 
-def atomic_write_no_follow(output: Path, data: bytes) -> None:
-    """Atomically publish output without following or replacing symlinks."""
-    output = output.expanduser()
-    if output.name in ("", ".", ".."):
-        raise ValueError("output must name a MIDI file")
-    output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-
+def directory_open_flags() -> int:
     directory_flags = os.O_RDONLY | os.O_DIRECTORY
     if hasattr(os, "O_NOFOLLOW"):
         directory_flags |= os.O_NOFOLLOW
-    directory_fd = os.open(output.parent, directory_flags)
+    if hasattr(os, "O_CLOEXEC"):
+        directory_flags |= os.O_CLOEXEC
+    return directory_flags
+
+
+def trusted_home_path() -> Path:
+    return Path(pwd.getpwuid(os.getuid()).pw_dir)
+
+
+def open_export_directory(home: Path) -> int:
+    """Walk/create the export tree from a retained trusted home descriptor."""
+    current_fd = os.open(home, directory_open_flags())
+    try:
+        for component in EXPORT_DIRECTORY_PARTS:
+            try:
+                next_fd = os.open(component, directory_open_flags(), dir_fd=current_fd)
+            except FileNotFoundError:
+                try:
+                    os.mkdir(component, mode=0o700, dir_fd=current_fd)
+                except FileExistsError:
+                    pass
+                next_fd = os.open(component, directory_open_flags(), dir_fd=current_fd)
+            details = os.fstat(next_fd)
+            if not stat.S_ISDIR(details.st_mode) or details.st_uid != os.getuid():
+                os.close(next_fd)
+                raise PermissionError("MIDI export directories must be owned by the current user")
+            os.close(current_fd)
+            current_fd = next_fd
+        return current_fd
+    except BaseException:
+        os.close(current_fd)
+        raise
+
+
+def atomic_write_no_follow(output: Path, data: bytes, *, home: Path | None = None) -> None:
+    """Atomically publish beneath trusted home without following any tree symlink."""
+    trusted_home = home if home is not None else trusted_home_path()
+    expected_parent = trusted_home.joinpath(*EXPORT_DIRECTORY_PARTS)
+    if not output.is_absolute() or output.parent != expected_parent:
+        raise ValueError("MIDI output must be directly beneath the configured export directory")
+    if not EXPORT_FILENAME_PATTERN.fullmatch(output.name):
+        raise ValueError("MIDI output filename is invalid")
+
+    directory_fd = open_export_directory(trusted_home)
     temporary_name = f".{output.name}.{secrets.token_hex(12)}.tmp"
     file_fd = -1
     try:
@@ -148,32 +190,141 @@ def find_soundfont() -> str:
         "/usr/share/soundfonts/FluidR3_GM2-2.sf2",
     ]
     for candidate in preferred:
-        if Path(candidate).is_file():
+        path = Path(candidate)
+        try:
+            details = path.stat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(details.st_mode) and details.st_uid == 0 and not details.st_mode & 0o022:
             return candidate
-    for pattern in ("/usr/share/soundfonts/*.sf2", "/usr/share/sounds/sf2/*.sf2"):
-        matches = sorted(glob.glob(pattern))
-        if matches:
-            return matches[0]
     raise RuntimeError("no SoundFont found; install soundfont-fluid")
 
 
-def serve() -> int:
-    executable = shutil.which("fluidsynth")
-    if not executable:
-        raise RuntimeError("FluidSynth is not installed")
-    soundfont = find_soundfont()
-    synth = subprocess.Popen(
-        [executable, "-a", "pipewire", "-g", "0.65", "-n", soundfont],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-        start_new_session=True,
-    )
-    if synth.stdin is None:
-        raise RuntimeError("could not open FluidSynth control channel")
+def trusted_fluidsynth() -> str:
+    try:
+        details = TRUSTED_FLUIDSYNTH.stat()
+    except FileNotFoundError as error:
+        raise RuntimeError("FluidSynth is not installed at /usr/bin/fluidsynth") from error
+    if (
+        not stat.S_ISREG(details.st_mode)
+        or details.st_uid != 0
+        or details.st_mode & 0o022
+        or not details.st_mode & stat.S_IXUSR
+    ):
+        raise RuntimeError("/usr/bin/fluidsynth is not a trusted packaged executable")
+    return str(TRUSTED_FLUIDSYNTH)
 
+
+def process_group_members(group_id: int, leader_pid: int) -> set[int]:
+    """Return every non-leader PID still carrying the stable process-group ID."""
+    members: set[int] = set()
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        if pid == leader_pid:
+            continue
+        try:
+            stat_line = (entry / "stat").read_text()
+            remainder = stat_line[stat_line.rfind(")") + 2 :].split()
+            process_group = int(remainder[2])
+        except (FileNotFoundError, IndexError, ValueError):
+            continue
+        if process_group == group_id:
+            members.add(pid)
+    return members
+
+
+def leader_exited_unreaped(leader_pid: int) -> bool:
+    try:
+        result = os.waitid(os.P_PID, leader_pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    except ChildProcessError as error:
+        raise RuntimeError("FluidSynth leader lost before supervised reap") from error
+    return result is not None
+
+
+def wait_for_process_group(leader_pid: int, group_id: int, timeout: float) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if leader_exited_unreaped(leader_pid) and not process_group_members(group_id, leader_pid):
+            return True
+        time.sleep(0.02)
+    return leader_exited_unreaped(leader_pid) and not process_group_members(group_id, leader_pid)
+
+
+def signal_process_group(group_id: int, signal_number: int) -> None:
+    try:
+        os.killpg(group_id, signal_number)
+    except ProcessLookupError:
+        pass
+
+
+def stop_process_group(
+    process: subprocess.Popen,
+    graceful_shutdown,
+    stderr_thread: threading.Thread | None,
+    *,
+    graceful_timeout: float = 2.0,
+    terminate_timeout: float = 2.0,
+    kill_timeout: float = 2.0,
+) -> None:
+    """Stop the complete group under an unreaped, non-reusable leader identity."""
+    leader_pid = process.pid
+    group_id = leader_pid  # Guaranteed by Popen(start_new_session=True).
+    try:
+        graceful_shutdown()
+    except (BrokenPipeError, OSError, RuntimeError):
+        pass
+
+    group_stopped = wait_for_process_group(leader_pid, group_id, graceful_timeout)
+    if not group_stopped:
+        signal_process_group(group_id, signal.SIGTERM)
+        group_stopped = wait_for_process_group(leader_pid, group_id, terminate_timeout)
+    if not group_stopped:
+        signal_process_group(group_id, signal.SIGKILL)
+        group_stopped = wait_for_process_group(leader_pid, group_id, kill_timeout)
+    if not group_stopped:
+        raise RuntimeError("FluidSynth process group did not stop after SIGKILL")
+
+    try:
+        process.wait(timeout=1.0)
+    except (subprocess.TimeoutExpired, OSError) as error:
+        raise RuntimeError("FluidSynth leader could not be reaped") from error
+    finally:
+        if stderr_thread is not None:
+            stderr_thread.join(timeout=1.0)
+            if stderr_thread.is_alive():
+                if process.stderr is not None:
+                    process.stderr.close()
+                stderr_thread.join(timeout=1.0)
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+        if stderr_thread is not None and stderr_thread.is_alive():
+            raise RuntimeError("FluidSynth diagnostic drain did not stop")
+
+
+def serve() -> int:
+    executable = trusted_fluidsynth()
+    soundfont = find_soundfont()
+    shutdown_signals = {signal.SIGINT, signal.SIGTERM}
+    old_sigint = signal.getsignal(signal.SIGINT)
+    old_sigterm = signal.getsignal(signal.SIGTERM)
+    previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, shutdown_signals)
+    try:
+        synth = subprocess.Popen(
+            [executable, "-a", "pipewire", "-g", "0.65", "-n", soundfont],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            start_new_session=True,
+        )
+    except BaseException:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+        raise
+    stderr_thread: threading.Thread | None = None
     synth_log: deque[str] = deque(maxlen=MAX_SYNTH_LOG_LINES)
 
     def drain_synth_stderr() -> None:
@@ -185,16 +336,12 @@ def serve() -> int:
                 break
             synth_log.append(chunk.rstrip())
 
-    stderr_thread = threading.Thread(target=drain_synth_stderr, daemon=True)
-    stderr_thread.start()
-
     def request_shutdown(signum, _frame) -> None:
         raise SystemExit(128 + signum)
 
-    signal.signal(signal.SIGINT, request_shutdown)
-    signal.signal(signal.SIGTERM, request_shutdown)
-
     def command(value: str) -> None:
+        if synth.stdin is None:
+            raise RuntimeError("could not open FluidSynth control channel")
         synth.stdin.write(value + "\n")
         synth.stdin.flush()
 
@@ -206,30 +353,24 @@ def serve() -> int:
             raise ValueError(f"{name} must be between {minimum} and {maximum}")
         return value
 
-    def stop_synth() -> None:
+    def graceful_stop() -> None:
+        if synth.stdin is None:
+            return
         try:
             command("cc 0 123 0")
             command("quit")
-        except (BrokenPipeError, OSError):
-            pass
-        try:
-            synth.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(synth.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-            try:
-                synth.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                try:
-                    os.killpg(synth.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                synth.wait(timeout=2)
-        stderr_thread.join(timeout=1)
+        finally:
+            if synth.stdin is not None and not synth.stdin.closed:
+                synth.stdin.close()
 
     try:
+        if synth.stdin is None or synth.stderr is None:
+            raise RuntimeError("could not open FluidSynth supervision channels")
+        stderr_thread = threading.Thread(target=drain_synth_stderr, daemon=True)
+        stderr_thread.start()
+        signal.signal(signal.SIGINT, request_shutdown)
+        signal.signal(signal.SIGTERM, request_shutdown)
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
         command("prog 0 0")
         print(json.dumps({"type": "ready", "soundfont": soundfont}), flush=True)
         while True:
@@ -262,7 +403,13 @@ def serve() -> int:
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 print(json.dumps({"type": "error", "message": str(error)[:256]}), flush=True)
     finally:
-        stop_synth()
+        signal.pthread_sigmask(signal.SIG_BLOCK, shutdown_signals)
+        try:
+            stop_process_group(synth, graceful_stop, stderr_thread)
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+            signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
     return 0
 
 

@@ -152,12 +152,12 @@ See [Architecture](docs/architecture.md) for the component and security model.
 
 Omarchy plugins run unsandboxed with the current user's permissions. ChordPumper Promarchy:
 
-- Runs only its bundled Python engine and the system FluidSynth executable.
+- Invokes its bundled engine with `/usr/bin/python3` and validates the packaged `/usr/bin/fluidsynth` executable before use.
 - Does not use the network.
 - Does not request elevated privileges.
 - Writes files only after Export MIDI is clicked.
 - Writes only beneath `~/Music/ChordPumper Promarchy` by default.
-- Publishes MIDI through a private temporary file without following symlinks or overwriting an existing filename.
+- Walks the fixed MIDI export tree from the account home descriptor, rejecting symlinks at every component, then publishes through a private temporary file without overwriting an existing filename.
 - Bounds control messages, MIDI values, event history, generated MIDI size, and retained synthesizer diagnostics.
 - Supervises FluidSynth as a process group and escalates from graceful exit to termination and a final kill/wait.
 - Does not modify Omarchy configuration directly.

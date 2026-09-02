@@ -2,6 +2,14 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.6.5 — 2026-09-02
+
+- Bound Python and FluidSynth execution to trusted packaged absolute paths.
+- Walked and created every MIDI export directory from a trusted home-directory descriptor with no-follow checks.
+- Kept the FluidSynth leader unreaped while verifying and escalating teardown across its complete process group.
+- Added regression coverage for symlinked ancestors and a leader that exits while a TERM-ignoring descendant survives.
+- Blocked out-of-range high voicings in the UI before playback or take history recording.
+
 ## 1.6.4 — 2026-09-01
 
 - Made MIDI publication atomic, private, no-follow, and no-clobber.

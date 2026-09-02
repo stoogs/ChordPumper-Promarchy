@@ -38,6 +38,7 @@ Then verify:
 - Random style, chord, and chord-shape selection
 - Empty-history handling and full played-history MIDI export
 - Atomic MIDI export and event/value limit regression tests
+- Symlinked export-ancestor and surviving process-group descendant regression tests
 - Clear MIDI confirmation, five-second cancellation, and new-take behavior
 - Shell restart and plugin re-enable
 

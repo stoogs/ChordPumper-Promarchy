@@ -220,6 +220,11 @@ Panel {
     if (fitted.shift !== 0) adjustedMidiNotes = fitted.notes.slice()
     return fitted.notes
   }
+  function midiNotesValid(notes) {
+    for (var i = 0; i < notes.length; i++)
+      if (!Number.isInteger(notes[i]) || notes[i] < 0 || notes[i] > 127) return false
+    return true
+  }
   function numberChordIndex(key) {
     if (key >= Qt.Key_1 && key <= Qt.Key_9) return key - Qt.Key_1
     if (key === Qt.Key_0) return 9
@@ -272,6 +277,11 @@ Panel {
         rawNotes.push(midi + intervals[intervalIndex])
     }
     var notes = resolveScaleNotes(rawNotes)
+    if (!midiNotesValid(notes)) {
+      statusText = "Voicing exceeds the MIDI range · lower the octave with Z"
+      keyArea.forceActiveFocus()
+      return
+    }
     if (notes.length === 0) {
       statusText = scaleLockModeName() + " blocked " + (modifier !== ""
         ? Model.noteClassName(midi) + " " + Model.qualityDisplayName(modifier)
@@ -302,6 +312,11 @@ Panel {
     var chord = chords[index]
     var rawNotes = Model.chordNotes(chord.root, chord.quality, octave)
     var notes = resolveScaleNotes(rawNotes)
+    if (!midiNotesValid(notes)) {
+      activeDegreeIndex = -1
+      statusText = "Voicing exceeds the MIDI range · lower the octave with Z"
+      return
+    }
     if (notes.length === 0) {
       activeDegreeIndex = -1
       statusText = scaleLockModeName() + " blocked " + Model.chordDisplayName(chord.root, chord.quality)
@@ -383,7 +398,7 @@ Panel {
     for (var i = 0; i < playedEvents.length; i++)
       exportEvents.push({ notes: playedEvents[i].notes.slice(0, 16) })
     statusText = "Exporting " + exportEvents.length + " played events…"
-    midiProcess.command = ["python3", enginePath, "midi", "--output", outputDir + "/" + midiFilename(),
+    midiProcess.command = ["/usr/bin/python3", enginePath, "midi", "--output", outputDir + "/" + midiFilename(),
       "--tempo", "110", "--events", JSON.stringify(exportEvents)]
     midiProcess.running = true
   }
@@ -419,7 +434,7 @@ Panel {
 
   Process {
     id: audioProcess
-    command: ["python3", root.enginePath, "serve"]
+    command: ["/usr/bin/python3", root.enginePath, "serve"]
     running: true
     stdinEnabled: true
     stdout: SplitParser { onRead: function(line) { root.handleAudioLine(line) } }
