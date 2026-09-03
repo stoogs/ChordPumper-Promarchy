@@ -2,6 +2,13 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.7.1 — 2026-09-03
+
+- Made Basic Keys faster, warmer, and more expressive with pitch-aware organ voicing and subtle soft drive.
+- Removed gain pumping and phase-reset clicks when notes overlap or chords share tones.
+- Smoothed high chord extensions, tightened the low register, and matched audio generation to PipeWire's playback cycle.
+- Set octave 3 as the default and focused the playable range on octaves 3–6.
+
 ## 1.7.0 — 2026-09-02
 
 - Added a zero-setup Basic Keys synthesizer using Omarchy's packaged PipeWire playback tool.

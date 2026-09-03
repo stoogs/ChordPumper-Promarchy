@@ -35,7 +35,7 @@ EXPORT_DIRECTORY_PARTS = ("Music", "ChordPumper Promarchy")
 EXPORT_FILENAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,199}\.mid")
 BASIC_SAMPLE_RATE = 48_000
 BASIC_CHANNELS = 2
-BASIC_CHUNK_FRAMES = 384
+BASIC_CHUNK_FRAMES = 1024
 MAX_BASIC_VOICES = 32
 
 def variable_length(value: int) -> bytes:
@@ -403,6 +403,7 @@ def serve_basic(pro_available: bool) -> int:
         voices: dict[int, dict[str, float | bool]] = {}
         try:
             while not writer_stop.is_set():
+                released_this_batch: set[int] = set()
                 while True:
                     try:
                         item = audio_commands.get_nowait()
@@ -411,48 +412,73 @@ def serve_basic(pro_available: bool) -> int:
                     kind = item[0]
                     if kind == "note_on":
                         note, velocity = item[1], item[2]
+                        if note in voices and note in released_this_batch:
+                            voices[note]["released"] = False
+                            voices[note]["release"] = 1.0
+                            voices[note]["velocity"] = velocity / 127.0
+                            released_this_batch.discard(note)
+                            continue
+                        brightness = max(0.48, min(1.12, 1.0 - (note - 54) * 0.025))
+                        low_blend = max(0.0, min(1.0, (note - 36) / 12.0))
+                        low_taming = 0.62 + 0.38 * low_blend
                         if note not in voices and len(voices) >= MAX_BASIC_VOICES:
                             voices.pop(next(iter(voices)))
                         voices[note] = {
                             "phase": 0.0,
                             "age": 0.0,
+                            "phase_step": 2.0 * math.pi * 440.0 * (2.0 ** ((note - 69) / 12.0)) / BASIC_SAMPLE_RATE,
+                            "fundamental": 0.88 + 0.12 * low_blend,
+                            "second": 0.34 * brightness * low_taming,
+                            "third": 0.11 * (brightness ** 1.35) * low_taming,
+                            "level": 1.28 - 0.28 * low_blend,
+                            "upper_warmth": max(0.0, min(
+                                0.40,
+                                (note - 59) * 0.008 if note < 72
+                                else 0.10 + (note - 72) * 0.0125,
+                            )),
                             "velocity": velocity / 127.0,
                             "released": False,
                             "release": 1.0,
+                            "release_rate": 0.9988 + 0.00075 * low_blend,
                         }
                     elif kind == "note_off" and item[1] in voices:
                         voices[item[1]]["released"] = True
+                        released_this_batch.add(item[1])
                     elif kind == "all_off":
                         for voice in voices.values():
                             voice["released"] = True
+                        released_this_batch.update(voices)
 
                 pcm = array("h")
                 remove_notes: set[int] = set()
-                voice_scale = 0.34 / max(1.0, math.sqrt(len(voices)))
                 for _frame in range(BASIC_CHUNK_FRAMES):
                     mixed = 0.0
                     for note, voice in voices.items():
                         phase = float(voice["phase"])
                         age = float(voice["age"])
                         release = float(voice["release"])
-                        attack = min(1.0, age / (BASIC_SAMPLE_RATE * 0.008))
-                        decay = 0.14 + 0.86 * math.exp(-age / (BASIC_SAMPLE_RATE * 2.8))
+                        attack = min(1.0, age / (BASIC_SAMPLE_RATE * 0.0015))
                         tone = (
-                            math.sin(phase)
-                            + 0.38 * math.sin(phase * 2.0)
-                            + 0.16 * math.sin(phase * 3.0)
-                            + 0.06 * math.sin(phase * 4.0)
-                        ) / 1.6
-                        mixed += tone * attack * decay * release * float(voice["velocity"])
-                        frequency = 440.0 * (2.0 ** ((note - 69) / 12.0))
-                        voice["phase"] = (phase + 2.0 * math.pi * frequency / BASIC_SAMPLE_RATE) % (2.0 * math.pi)
+                            float(voice["fundamental"]) * math.sin(phase)
+                            + float(voice["second"]) * math.sin(phase * 2.0)
+                            + float(voice["third"]) * math.sin(phase * 3.0)
+                        ) / 1.45
+                        upper_warmth = float(voice["upper_warmth"])
+                        if upper_warmth > 0.0:
+                            rounded_tone = math.tanh(tone * 1.6) / 1.6
+                            tone = tone * (1.0 - upper_warmth) + rounded_tone * upper_warmth
+                        mixed += tone * attack * release * float(voice["velocity"]) * float(voice["level"])
+                        voice["phase"] = (phase + float(voice["phase_step"])) % (2.0 * math.pi)
                         voice["age"] = age + 1.0
                         if bool(voice["released"]):
-                            release *= 0.99955
+                            release *= float(voice["release_rate"])
                             voice["release"] = release
                             if release < 0.001:
                                 remove_notes.add(note)
-                    sample = max(-32767, min(32767, round(mixed * voice_scale * 32767)))
+                    clean = mixed * 0.27
+                    softly_driven = math.tanh(clean * 2.0) / 2.0
+                    shaped = clean * 0.80 + softly_driven * 0.20
+                    sample = max(-32767, min(32767, round(shaped * 32767)))
                     pcm.append(sample)
                     pcm.append(sample)
                 for note in remove_notes:
@@ -507,6 +533,8 @@ def serve_basic(pro_available: bool) -> int:
                 if kind == "note_on":
                     note = bounded_int(message, "note", 0, 127)
                     velocity = bounded_int(message, "velocity", 1, 127, 100)
+                    if note in requested_notes:
+                        continue
                     if note not in requested_notes and len(requested_notes) >= MAX_BASIC_VOICES:
                         raise ValueError(f"basic audio supports at most {MAX_BASIC_VOICES} active voices")
                     queue_audio(("note_on", note, velocity))

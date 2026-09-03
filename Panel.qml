@@ -30,7 +30,7 @@ Panel {
   property bool keyPickerOpen: false
   property bool scalePickerOpen: false
   property int lastScaleShift: 0
-  property int octave: 4
+  property int octave: 3
   property string modifier: ""
   property string lockedModifier: ""
   property int temporaryModifierIndex: -1
@@ -262,8 +262,8 @@ Panel {
   function handlePress(event) {
     if (event.isAutoRepeat) { event.accepted = true; return }
     if (event.key === Qt.Key_Escape) { close(); event.accepted = true; return }
-    if (event.key === Qt.Key_Z) { octave = Math.max(1, octave - 1); statusText = "Octave " + octave; event.accepted = true; return }
-    if (event.key === Qt.Key_X) { octave = Math.min(7, octave + 1); statusText = "Octave " + octave; event.accepted = true; return }
+    if (event.key === Qt.Key_Z) { octave = Math.max(3, octave - 1); statusText = octave === 3 ? "Octave 3 · lowest range" : "Octave " + octave; event.accepted = true; return }
+    if (event.key === Qt.Key_X) { octave = Math.min(6, octave + 1); statusText = octave === 6 ? "Octave 6 · highest range" : "Octave " + octave; event.accepted = true; return }
     if (event.text === "<") {
       cycleStyle(); event.accepted = true; return
     }
