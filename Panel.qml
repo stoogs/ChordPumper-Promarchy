@@ -47,6 +47,8 @@ Panel {
   property string activeAudioBackend: ""
   property bool proAudioAvailable: false
   property bool audioRestarting: false
+  readonly property string proHelpText: "Want the richer Pro piano sound? Follow the GitHub instructions to install Omarchy's optional FluidSynth packages."
+  readonly property string proHelpUrl: "https://github.com/stoogs/ChordPumper-Promarchy#optional-pro-piano"
   property int styleIndex: 0
   property bool stylePickerOpen: false
   property string chordPaletteMode: "core"
@@ -109,7 +111,7 @@ Panel {
       return
     }
     if (backend === "fluid" && !proAudioAvailable) {
-      statusText = "Pro piano is not installed · follow the GitHub README to enhance the sound"
+      statusText = proHelpText
       keyArea.forceActiveFocus()
       return
     }
@@ -935,10 +937,20 @@ Panel {
         Row {
           width: parent.width; spacing: Style.space(8)
           Text {
+            id: statusLabel
             width: parent.width - clearHistoryButton.width - exportButton.width - parent.spacing * 2
-            text: root.statusText; color: Qt.darker(root.foreground, 1.3); font.family: root.fontFamily
+            text: root.statusText
+            color: root.statusText === root.proHelpText ? root.pianoPressed : Qt.darker(root.foreground, 1.3)
+            font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight
             textFormat: Text.PlainText
+            font.underline: root.statusText === root.proHelpText
+            MouseArea {
+              anchors.fill: parent
+              enabled: root.statusText === root.proHelpText
+              cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+              onClicked: Qt.openUrlExternally(root.proHelpUrl)
+            }
           }
           Button {
             id: clearHistoryButton
