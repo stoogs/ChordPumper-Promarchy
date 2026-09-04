@@ -111,6 +111,8 @@ Panel {
   function close() {
     stopCinematicCue()
     stopActiveNotes()
+    manualHeldNotes = []
+    activeMidi = -1
     if (audioProcess.running) audioProcess.write(JSON.stringify({ type: "all_off" }) + "\n")
     root.controller.hide()
   }
@@ -393,7 +395,7 @@ Panel {
       historyLabel = Model.noteClassName(playedRoot) + " " + Model.qualityDisplayName(modifier)
     }
     recordHistory(historyLabel, notes)
-    startNotes(notes)
+    startChordNotes(notes)
     statusText = modifier !== ""
       ? "Playing " + historyLabel + " · " + notes.map(Model.noteName).join("  ")
       : "Playing " + Model.noteName(notes[0]) + (audioReady ? "" : " · audio starting…")
@@ -417,8 +419,6 @@ Panel {
   function pressManualMidi(midi) {
     for (var heldIndex = 0; heldIndex < manualHeldNotes.length; heldIndex++)
       if (manualHeldNotes[heldIndex].source === midi) return
-    if (activeDegreeIndex >= 0 || (manualHeldNotes.length === 0 && activeChordNotes.length > 0))
-      stopActiveNotes()
     if (manualHeldNotes.length >= 5) {
       statusText = "Manual piano holds up to 5 notes"
       keyArea.forceActiveFocus()
@@ -431,15 +431,14 @@ Panel {
       return
     }
     var output = notes[0]
-    var alreadySounding = manualOutputNotes().indexOf(output) !== -1
+    var alreadySounding = manualOutputNotes().indexOf(output) !== -1 || activeChordNotes.indexOf(output) !== -1
     var nextHeld = manualHeldNotes.slice()
     nextHeld.push({ source: midi, note: output })
     manualHeldNotes = nextHeld
-    activeChordNotes = manualOutputNotes()
     activeMidi = midi
     if (!alreadySounding) startNotes([output])
     recordHistory(Model.noteName(output), [output])
-    statusText = "Holding " + activeChordNotes.map(Model.noteName).join("  ") + " · " + manualHeldNotes.length + "/5"
+    statusText = "Holding " + manualOutputNotes().map(Model.noteName).join("  ") + " · " + manualHeldNotes.length + "/5"
     keyArea.forceActiveFocus()
   }
   function releaseManualMidi(midi) {
@@ -453,9 +452,8 @@ Panel {
     if (released === null) return
     manualHeldNotes = remaining
     var outputs = manualOutputNotes()
-    if (outputs.indexOf(released.note) === -1 && audioProcess.running)
+    if (outputs.indexOf(released.note) === -1 && activeChordNotes.indexOf(released.note) === -1 && audioProcess.running)
       audioProcess.write(JSON.stringify({ type: "note_off", note: released.note }) + "\n")
-    activeChordNotes = outputs
     activeMidi = remaining.length > 0 ? remaining[remaining.length - 1].source : -1
     if (remaining.length === 0) statusText = "Manual piano ready"
   }
@@ -479,7 +477,7 @@ Panel {
     var playedRoot = scaleLockMode === "fit" ? chord.root + lastScaleShift : chord.root
     var historyLabel = Model.chordDisplayName(playedRoot, chord.quality)
     recordHistory(historyLabel, notes)
-    startNotes(notes)
+    startChordNotes(notes)
     statusText = chord.roman + " · " + historyLabel + " · " + notes.map(Model.noteName).join("  ")
   }
   function releaseDegree(index) {
@@ -501,15 +499,24 @@ Panel {
     for (var noteIndex = 0; noteIndex < notes.length; noteIndex++)
       audioProcess.write(JSON.stringify({ type: "note_on", note: notes[noteIndex], velocity: 104 }) + "\n")
   }
+  function startChordNotes(notes) {
+    var manualOutputs = manualOutputNotes()
+    var newNotes = []
+    for (var index = 0; index < notes.length; index++)
+      if (manualOutputs.indexOf(notes[index]) === -1) newNotes.push(notes[index])
+    startNotes(newNotes)
+  }
+  function isSounding(midi) {
+    return activeChordNotes.indexOf(midi) !== -1 || manualOutputNotes().indexOf(midi) !== -1
+  }
   function stopActiveNotes() {
     if (audioProcess.running) {
       for (var i = 0; i < activeChordNotes.length; i++)
-        audioProcess.write(JSON.stringify({ type: "note_off", note: activeChordNotes[i] }) + "\n")
+        if (manualOutputNotes().indexOf(activeChordNotes[i]) === -1)
+          audioProcess.write(JSON.stringify({ type: "note_off", note: activeChordNotes[i] }) + "\n")
     }
     activeChordNotes = []
-    manualHeldNotes = []
     adjustedMidiNotes = []
-    activeMidi = -1
     activeDegreeIndex = -1
   }
 
@@ -851,10 +858,17 @@ Panel {
             spacing: Style.space(6)
             anchors.verticalCenter: parent.verticalCenter
             Text {
+              text: "[ ] ±10"
+              color: root.pianoMuted
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
               id: soundFactorLabel
-              text: root.activeAudioBackend === "fluid"
-                ? "CINEMATIC " + root.cinematicFactor
-                : "CHARACTER " + root.basicCharacter
+              text: "TONE " + (root.activeAudioBackend === "fluid"
+                ? root.cinematicFactor
+                : root.basicCharacter)
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1042,6 +1056,41 @@ Panel {
             font.pixelSize: Style.font.caption
           }
         }
+        Row {
+          id: chordKeyStrip
+          width: parent.width
+          height: Style.space(23)
+          spacing: Style.space(2)
+          Repeater {
+            model: root.chords
+            Rectangle {
+              required property var modelData
+              required property int index
+              width: (chordKeyStrip.width - chordKeyStrip.spacing * 9) / 10
+              height: chordKeyStrip.height
+              radius: Style.space(3)
+              color: root.activeDegreeIndex === index
+                ? root.pianoPressed
+                : Color.popups.background
+              border.width: 1
+              border.color: root.activeDegreeIndex === index ? root.foreground : Color.popups.border
+              clip: true
+              Text {
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(4)
+                anchors.rightMargin: Style.space(4)
+                verticalAlignment: Text.AlignVCenter
+                horizontalAlignment: Text.AlignHCenter
+                text: (index === 9 ? "0" : String(index + 1)) + " · " + Model.chordDisplayName(modelData.root, modelData.quality)
+                elide: Text.ElideRight
+                color: root.activeDegreeIndex === index ? root.pianoSurface : root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: root.activeDegreeIndex === index
+              }
+            }
+          }
+        }
         Rectangle {
           id: piano
           width: parent.width
@@ -1062,7 +1111,7 @@ Panel {
               readonly property int midi: 12 * (root.octave + 1) + modelData.offset
               readonly property bool scaleTone: root.scaleAllowed(midi)
               readonly property bool adjusted: root.adjustedMidiNotes.indexOf(midi) !== -1
-              readonly property bool sounding: root.activeChordNotes.indexOf(midi) !== -1
+              readonly property bool sounding: root.isSounding(midi)
               x: index * piano.whiteKeyWidth
               y: 0
               width: piano.whiteKeyWidth + 1
@@ -1114,7 +1163,7 @@ Panel {
               readonly property int midi: 12 * (root.octave + 1) + modelData.offset
               readonly property bool scaleTone: root.scaleAllowed(midi)
               readonly property bool adjusted: root.adjustedMidiNotes.indexOf(midi) !== -1
-              readonly property bool sounding: root.activeChordNotes.indexOf(midi) !== -1
+              readonly property bool sounding: root.isSounding(midi)
               z: 2
               x: modelData.after * piano.whiteKeyWidth - piano.blackKeyWidth / 2
               y: 0

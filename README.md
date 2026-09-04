@@ -73,6 +73,8 @@ Click the compact piano icon in the bar to open the instrument. Hover it to see 
 
 The **Basic / Pro** selector changes audio engines without affecting the current musical settings or MIDI take. Auto-detection selects Pro when the trusted system FluidSynth executable and FluidR3 SoundFont are present; otherwise Basic is selected.
 
+**Tone** shapes the current engine: Basic becomes cleaner at `0` and more harmonically driven at `100`; Pro adds increasingly cinematic space and width. Use `[` and `]` for 10-point adjustments, or double-click the label or slider to return to its default.
+
 ### Style chords
 
 Hold `1` through `9`, or `0` for the tenth slot, to play the ten named progression chords supplied by the active style. The chord stops when the number key is released. Core mode preserves the original chords in slots `1–6`; slots `7–0` add four genre-specific colour voicings.
