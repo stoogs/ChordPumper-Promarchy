@@ -2,6 +2,11 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.7.3 — 2026-09-04
+
+- Defaulted Scale Lock to Off so the style's `1–0` chord palette plays unchanged until locking is deliberately enabled.
+- Refreshed the marketplace preview with the current compact Tone control layout.
+
 ## 1.7.2 — 2026-09-04
 
 - Added a unified Tone control for Basic and Pro, with keyboard stepping and reset gestures.
