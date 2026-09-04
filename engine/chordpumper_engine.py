@@ -401,6 +401,7 @@ def serve_basic(pro_available: bool) -> int:
 
     def write_basic_audio() -> None:
         voices: dict[int, dict[str, float | bool]] = {}
+        character = 50
         try:
             while not writer_stop.is_set():
                 released_this_batch: set[int] = set()
@@ -410,6 +411,9 @@ def serve_basic(pro_available: bool) -> int:
                     except queue.Empty:
                         break
                     kind = item[0]
+                    if kind == "character":
+                        character = item[1]
+                        continue
                     if kind == "note_on":
                         note, velocity = item[1], item[2]
                         if note in voices and note in released_this_batch:
@@ -458,10 +462,11 @@ def serve_basic(pro_available: bool) -> int:
                         age = float(voice["age"])
                         release = float(voice["release"])
                         attack = min(1.0, age / (BASIC_SAMPLE_RATE * 0.0015))
+                        harmonic_scale = 0.65 + character * 0.007
                         tone = (
                             float(voice["fundamental"]) * math.sin(phase)
-                            + float(voice["second"]) * math.sin(phase * 2.0)
-                            + float(voice["third"]) * math.sin(phase * 3.0)
+                            + harmonic_scale * float(voice["second"]) * math.sin(phase * 2.0)
+                            + harmonic_scale * float(voice["third"]) * math.sin(phase * 3.0)
                         ) / 1.45
                         upper_warmth = float(voice["upper_warmth"])
                         if upper_warmth > 0.0:
@@ -477,7 +482,8 @@ def serve_basic(pro_available: bool) -> int:
                                 remove_notes.add(note)
                     clean = mixed * 0.27
                     softly_driven = math.tanh(clean * 2.0) / 2.0
-                    shaped = clean * 0.80 + softly_driven * 0.20
+                    drive_mix = character * 0.004
+                    shaped = clean * (1.0 - drive_mix) + softly_driven * drive_mix
                     sample = max(-32767, min(32767, round(shaped * 32767)))
                     pcm.append(sample)
                     pcm.append(sample)
@@ -548,6 +554,9 @@ def serve_basic(pro_available: bool) -> int:
                     requested_notes.clear()
                 elif kind == "program":
                     bounded_int(message, "program", 0, 127)
+                elif kind == "character":
+                    character = bounded_int(message, "value", 0, 100)
+                    queue_audio(("character", character))
                 elif kind == "quit":
                     break
                 else:
@@ -627,6 +636,23 @@ def serve_fluid() -> int:
             if synth.stdin is not None and not synth.stdin.closed:
                 synth.stdin.close()
 
+    def set_cinematic(value: int) -> None:
+        width = max(0.0, (value - 50) / 50.0)
+        if value == 0:
+            command("cc 0 91 40")
+            command("cc 0 93 0")
+            command("cc 0 11 127")
+            command("set synth.chorus.depth 4.25")
+            command("set synth.chorus.level 0.60")
+            command("set synth.chorus.nr 3")
+            return
+        command(f"cc 0 91 {min(127, 40 + round(value * 0.87))}")
+        command(f"cc 0 93 {round(value * 0.50)}")
+        command(f"cc 0 11 {max(120, 127 - round(value * 0.07))}")
+        command(f"set synth.chorus.depth {4.25 + width * 13.75:.2f}")
+        command(f"set synth.chorus.level {0.60 + width * 0.50:.2f}")
+        command(f"set synth.chorus.nr {3 + round(width * 2)}")
+
     try:
         if synth.stdin is None or synth.stderr is None:
             raise RuntimeError("could not open FluidSynth supervision channels")
@@ -656,6 +682,8 @@ def serve_fluid() -> int:
                     command(f"noteoff 0 {bounded_int(message, 'note', 0, 127)}")
                 elif kind == "program":
                     command(f"prog 0 {bounded_int(message, 'program', 0, 127)}")
+                elif kind == "cinematic":
+                    set_cinematic(bounded_int(message, "value", 0, 100))
                 elif kind == "all_off":
                     command("cc 0 123 0")
                 elif kind == "quit":

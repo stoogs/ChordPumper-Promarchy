@@ -37,6 +37,7 @@ Panel {
   property int activeMidi: -1
   property int activeDegreeIndex: -1
   property var activeChordNotes: []
+  property var manualHeldNotes: []
   property var adjustedMidiNotes: []
   property var noteHistory: []
   property var playedEvents: []
@@ -47,6 +48,15 @@ Panel {
   property string activeAudioBackend: ""
   property bool proAudioAvailable: false
   property bool audioRestarting: false
+  property int basicCharacter: 50
+  property int cinematicFactor: 0
+  property int cinematicCueIndex: 0
+  property var cinematicCueNotes: []
+  property int cueAccentIndex: 0
+  property int cueAccentNote: -1
+  property bool cueUsesBasic: false
+  property bool cueSoundActive: false
+  property int cueSavedSoundFactor: 0
   readonly property string proHelpText: "Want the richer Pro piano sound? Follow the GitHub instructions to install Omarchy's optional FluidSynth packages."
   readonly property string proHelpUrl: "https://github.com/stoogs/ChordPumper-Promarchy#optional-pro-piano"
   property int styleIndex: 0
@@ -99,6 +109,7 @@ Panel {
     Qt.callLater(function() { keyArea.forceActiveFocus() })
   }
   function close() {
+    stopCinematicCue()
     stopActiveNotes()
     if (audioProcess.running) audioProcess.write(JSON.stringify({ type: "all_off" }) + "\n")
     root.controller.hide()
@@ -131,6 +142,56 @@ Panel {
     if (root.bar && typeof root.bar.switchPanelFrom === "function")
       return root.bar.switchPanelFrom(root.barIdentity, direction)
     return false
+  }
+  function setBasicCharacter(value) {
+    basicCharacter = Math.max(0, Math.min(100, Math.round(value)))
+    if (audioProcess.running && audioReady && activeAudioBackend === "basic")
+      audioProcess.write(JSON.stringify({ type: "character", value: basicCharacter }) + "\n")
+    statusText = "Basic character " + basicCharacter + " · "
+      + (basicCharacter < 34 ? "clean" : basicCharacter > 66 ? "driven" : "balanced")
+  }
+  function setCinematic(value) {
+    cinematicFactor = Math.max(0, Math.min(100, Math.round(value)))
+    if (audioProcess.running && audioReady && activeAudioBackend === "fluid")
+      audioProcess.write(JSON.stringify({ type: "cinematic", value: cinematicFactor }) + "\n")
+    statusText = "Cinematic " + cinematicFactor + " · "
+      + (cinematicFactor < 34 ? "natural piano" : cinematicFactor > 66 ? "wide and atmospheric" : "spacious piano")
+  }
+  function adjustSoundFactor(delta) {
+    if (activeAudioBackend === "fluid") setCinematic(cinematicFactor + delta)
+    else if (activeAudioBackend === "basic") setBasicCharacter(basicCharacter + delta)
+    keyArea.forceActiveFocus()
+  }
+  function stopCinematicCue() {
+    if (audioProcess.running)
+      for (var index = 0; index < cinematicCueNotes.length; index++)
+        audioProcess.write(JSON.stringify({ type: "note_off", note: cinematicCueNotes[index] }) + "\n")
+    cinematicCueNotes = []
+    cinematicCueTimer.stop()
+    if (cueAccentNote >= 0 && audioProcess.running)
+      audioProcess.write(JSON.stringify({ type: "note_off", note: cueAccentNote }) + "\n")
+    cueAccentNote = -1
+    cueAccentTimer.stop()
+    if (cueSoundActive) {
+      if (cueUsesBasic) setBasicCharacter(cueSavedSoundFactor)
+      else setCinematic(cueSavedSoundFactor)
+      cueSoundActive = false
+    }
+  }
+  function playCinematicCue() {
+    if (!audioProcess.running || !audioReady) return
+    stopCinematicCue()
+    cueUsesBasic = activeAudioBackend === "basic"
+    cueSavedSoundFactor = cueUsesBasic ? basicCharacter : cinematicFactor
+    cueSoundActive = true
+    if (cueUsesBasic) setBasicCharacter(0)
+    else setCinematic(0)
+    cinematicCueIndex = 0
+    cueAccentIndex = 0
+    statusText = "Chord cue · original 1–0 progression"
+    cinematicCueTimer.interval = 1
+    cinematicCueTimer.start()
+    cueAccentTimer.start()
   }
   function modifierIndexForText(text) {
     return "cvbnm,./".indexOf(String(text).toLowerCase())
@@ -261,6 +322,8 @@ Panel {
   }
   function handlePress(event) {
     if (event.isAutoRepeat) { event.accepted = true; return }
+    if (event.key === Qt.Key_BracketLeft) { adjustSoundFactor(-10); event.accepted = true; return }
+    if (event.key === Qt.Key_BracketRight) { adjustSoundFactor(10); event.accepted = true; return }
     if (event.key === Qt.Key_Escape) { close(); event.accepted = true; return }
     if (event.key === Qt.Key_Z) { octave = Math.max(3, octave - 1); statusText = octave === 3 ? "Octave 3 · lowest range" : "Octave " + octave; event.accepted = true; return }
     if (event.key === Qt.Key_X) { octave = Math.min(6, octave + 1); statusText = octave === 6 ? "Octave 6 · highest range" : "Octave " + octave; event.accepted = true; return }
@@ -297,6 +360,10 @@ Panel {
   }
 
   function pressMidi(midi) {
+    if (modifier === "") {
+      pressManualMidi(midi)
+      return
+    }
     stopActiveNotes()
     var rawNotes = [midi]
     if (modifier !== "") {
@@ -333,7 +400,64 @@ Panel {
     keyArea.forceActiveFocus()
   }
   function releaseMidi(midi) {
+    if (manualHeldNotes.length > 0) {
+      releaseManualMidi(midi)
+      return
+    }
     if (activeMidi === midi) stopActiveNotes()
+  }
+  function manualOutputNotes() {
+    var outputs = []
+    for (var index = 0; index < manualHeldNotes.length; index++) {
+      var note = manualHeldNotes[index].note
+      if (outputs.indexOf(note) === -1) outputs.push(note)
+    }
+    return outputs
+  }
+  function pressManualMidi(midi) {
+    for (var heldIndex = 0; heldIndex < manualHeldNotes.length; heldIndex++)
+      if (manualHeldNotes[heldIndex].source === midi) return
+    if (activeDegreeIndex >= 0 || (manualHeldNotes.length === 0 && activeChordNotes.length > 0))
+      stopActiveNotes()
+    if (manualHeldNotes.length >= 5) {
+      statusText = "Manual piano holds up to 5 notes"
+      keyArea.forceActiveFocus()
+      return
+    }
+    var notes = resolveScaleNotes([midi])
+    if (!midiNotesValid(notes) || notes.length === 0) {
+      statusText = scaleLockModeName() + " blocked " + Model.noteName(midi)
+      keyArea.forceActiveFocus()
+      return
+    }
+    var output = notes[0]
+    var alreadySounding = manualOutputNotes().indexOf(output) !== -1
+    var nextHeld = manualHeldNotes.slice()
+    nextHeld.push({ source: midi, note: output })
+    manualHeldNotes = nextHeld
+    activeChordNotes = manualOutputNotes()
+    activeMidi = midi
+    if (!alreadySounding) startNotes([output])
+    recordHistory(Model.noteName(output), [output])
+    statusText = "Holding " + activeChordNotes.map(Model.noteName).join("  ") + " · " + manualHeldNotes.length + "/5"
+    keyArea.forceActiveFocus()
+  }
+  function releaseManualMidi(midi) {
+    var released = null
+    var remaining = []
+    for (var heldIndex = 0; heldIndex < manualHeldNotes.length; heldIndex++) {
+      var held = manualHeldNotes[heldIndex]
+      if (held.source === midi && released === null) released = held
+      else remaining.push(held)
+    }
+    if (released === null) return
+    manualHeldNotes = remaining
+    var outputs = manualOutputNotes()
+    if (outputs.indexOf(released.note) === -1 && audioProcess.running)
+      audioProcess.write(JSON.stringify({ type: "note_off", note: released.note }) + "\n")
+    activeChordNotes = outputs
+    activeMidi = remaining.length > 0 ? remaining[remaining.length - 1].source : -1
+    if (remaining.length === 0) statusText = "Manual piano ready"
   }
   function pressDegree(index) {
     stopActiveNotes()
@@ -383,6 +507,7 @@ Panel {
         audioProcess.write(JSON.stringify({ type: "note_off", note: activeChordNotes[i] }) + "\n")
     }
     activeChordNotes = []
+    manualHeldNotes = []
     adjustedMidiNotes = []
     activeMidi = -1
     activeDegreeIndex = -1
@@ -400,6 +525,10 @@ Panel {
           : proAudioAvailable
             ? "Audio ready · Basic Keys · Pro piano available"
             : "Audio ready · Basic Keys · follow the GitHub README to enhance the sound"
+        if (activeAudioBackend === "basic")
+          audioProcess.write(JSON.stringify({ type: "character", value: basicCharacter }) + "\n")
+        else if (cinematicFactor > 0)
+          audioProcess.write(JSON.stringify({ type: "cinematic", value: cinematicFactor }) + "\n")
       } else if (message.type === "error") {
         audioReady = false
         statusText = "Audio unavailable · " + message.message
@@ -464,6 +593,58 @@ Panel {
     onTriggered: {
       root.clearHistoryArmed = false
       root.statusText = "Clear cancelled · MIDI history kept"
+    }
+  }
+
+  Timer {
+    id: cinematicCueTimer
+    interval: 1090
+    repeat: true
+    onTriggered: {
+      interval = 1090
+      for (var releaseIndex = 0; releaseIndex < root.cinematicCueNotes.length; releaseIndex++)
+        audioProcess.write(JSON.stringify({ type: "note_off", note: root.cinematicCueNotes[releaseIndex] }) + "\n")
+      root.cinematicCueNotes = []
+      if (root.cinematicCueIndex >= 10) {
+        root.stopCinematicCue()
+        root.statusText = "Cinematic cue complete"
+        return
+      }
+      if (root.cinematicCueIndex % 2 === 0) {
+        var cueFactor = Math.min(100, (Math.floor(root.cinematicCueIndex / 2) + 1) * 20)
+        if (root.cueUsesBasic) root.setBasicCharacter(cueFactor)
+        else root.setCinematic(cueFactor)
+      }
+      var chord = root.chords[root.cinematicCueIndex]
+      var notes = root.resolveScaleNotes(Model.chordNotes(chord.root, chord.quality, root.octave))
+      if (root.midiNotesValid(notes)) {
+        root.cinematicCueNotes = notes.slice()
+        for (var noteIndex = 0; noteIndex < notes.length; noteIndex++)
+          audioProcess.write(JSON.stringify({ type: "note_on", note: notes[noteIndex], velocity: 108 }) + "\n")
+      }
+      root.cinematicCueIndex++
+    }
+  }
+
+  Timer {
+    id: cueAccentTimer
+    interval: 272
+    repeat: true
+    onTriggered: {
+      if (root.cueAccentNote >= 0)
+        audioProcess.write(JSON.stringify({ type: "note_off", note: root.cueAccentNote }) + "\n")
+      root.cueAccentNote = -1
+      if (root.cinematicCueNotes.length === 0) return
+      var degrees = [4, 2, 5, 4, 6, 4, 2, 1, 4, 5, 6, 4, 2, 1, 0, 2]
+      var octaves = [0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1]
+      var scale = Model.scaleSteps(root.scaleType)
+      var note = 12 * (Math.min(6, root.octave + 2) + 1) + root.keyRoot
+        + scale[degrees[root.cueAccentIndex] % scale.length]
+        + 12 * octaves[root.cueAccentIndex]
+      note = Math.max(0, Math.min(127, note))
+      root.cueAccentNote = note
+      audioProcess.write(JSON.stringify({ type: "note_on", note: note, velocity: 88 }) + "\n")
+      root.cueAccentIndex = (root.cueAccentIndex + 1) % degrees.length
     }
   }
 
@@ -610,8 +791,13 @@ Panel {
         }
 
         Row {
-          spacing: Style.space(5)
-          Text {
+          id: scaleLockRow
+          width: parent.width
+          spacing: Style.space(8)
+          Row {
+            id: scaleControls
+            spacing: Style.space(5)
+            Text {
             text: "SCALE LOCK"
             color: Qt.darker(root.foreground, 1.35)
             font.family: root.fontFamily
@@ -641,9 +827,9 @@ Panel {
               if (root.scalePickerOpen) root.keyPickerOpen = false
             }
           }
-          Repeater {
-            model: root.scaleLockModes
-            Button {
+            Repeater {
+              model: root.scaleLockModes
+              Button {
               required property var modelData
               text: modelData.name
               selected: root.scaleLockMode === modelData.id
@@ -652,6 +838,58 @@ Panel {
               fontFamily: root.fontFamily
               fontSize: Style.font.bodySmall
               onClicked: { root.setScaleLockMode(modelData.id); keyArea.forceActiveFocus() }
+              }
+            }
+          }
+          Item {
+            width: Math.max(0, parent.width - scaleControls.width - characterControls.width - parent.spacing * 2)
+            height: 1
+          }
+          Row {
+            id: characterControls
+            visible: root.activeAudioBackend === "basic" || root.activeAudioBackend === "fluid"
+            spacing: Style.space(6)
+            anchors.verticalCenter: parent.verticalCenter
+            Text {
+              id: soundFactorLabel
+              text: root.activeAudioBackend === "fluid"
+                ? "CINEMATIC " + root.cinematicFactor
+                : "CHARACTER " + root.basicCharacter
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+              TapHandler {
+                acceptedButtons: Qt.RightButton
+                onDoubleTapped: root.playCinematicCue()
+              }
+              TapHandler {
+                acceptedButtons: Qt.LeftButton
+                onDoubleTapped: {
+                  if (root.activeAudioBackend === "fluid") root.setCinematic(0)
+                  else root.setBasicCharacter(50)
+                }
+              }
+            }
+            PanelSlider {
+              id: characterSlider
+              bar: root.bar
+              width: Style.space(125)
+              minimum: 0
+              maximum: 100
+              step: 1
+              value: root.activeAudioBackend === "fluid" ? root.cinematicFactor : root.basicCharacter
+              tickCount: 3
+              onMoved: function(value) {
+                if (root.activeAudioBackend === "fluid") root.setCinematic(value)
+                else root.setBasicCharacter(value)
+              }
+              TapHandler {
+                onDoubleTapped: {
+                  if (root.activeAudioBackend === "fluid") root.setCinematic(0)
+                  else root.setBasicCharacter(50)
+                }
+              }
             }
           }
         }
@@ -829,9 +1067,8 @@ Panel {
               y: 0
               width: piano.whiteKeyWidth + 1
               height: piano.height
-              color: adjusted ? root.pianoAdjusted
-                : root.activeMidi === midi ? root.pianoPressed
-                : sounding ? Style.selectedStateColor(root.foreground, Color.accent, Color.urgent)
+              color: sounding ? root.pianoPressed
+                : adjusted ? root.pianoAdjusted
                 : scaleTone ? root.pianoWhite
                 : Qt.rgba(root.pianoMuted.r, root.pianoMuted.g, root.pianoMuted.b, 0.52)
               border.width: 1
@@ -845,7 +1082,7 @@ Panel {
                 anchors.bottomMargin: Style.space(4)
                 text: modelData.letter
                 visible: modelData.letter !== ""
-                color: parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface
+                color: parent.sounding || parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface
                   : (parent.scaleTone ? root.pianoBlack : root.pianoSurface)
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.subtitle
@@ -857,7 +1094,7 @@ Panel {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Style.space(5)
                 text: Model.noteName(parent.midi)
-                color: parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface : root.pianoMuted
+                color: parent.sounding || parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface : root.pianoMuted
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
               }
@@ -883,13 +1120,12 @@ Panel {
               y: 0
               width: piano.blackKeyWidth
               height: piano.blackKeyHeight
-              color: adjusted ? root.pianoAdjusted
-                : root.activeMidi === midi ? root.pianoPressed
-                : sounding ? Style.selectedStateColor(root.foreground, Color.accent, Color.urgent)
+              color: sounding ? root.pianoPressed
+                : adjusted ? root.pianoAdjusted
                 : scaleTone ? root.pianoBlack
                 : Qt.darker(root.pianoMuted, 1.45)
               border.width: 1
-              border.color: adjusted || root.activeMidi === midi ? root.foreground : Color.popups.border
+              border.color: sounding || adjusted || root.activeMidi === midi ? root.foreground : Color.popups.border
               radius: Style.space(3)
               Behavior on color { ColorAnimation { duration: 90 } }
 
@@ -898,8 +1134,8 @@ Panel {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: Style.space(7)
-                color: parent.adjusted ? Qt.darker(root.pianoAdjusted, 1.15)
-                  : root.activeMidi === parent.midi ? Qt.darker(root.pianoPressed, 1.15)
+                color: parent.sounding || root.activeMidi === parent.midi ? Qt.darker(root.pianoPressed, 1.15)
+                  : parent.adjusted ? Qt.darker(root.pianoAdjusted, 1.15)
                   : Qt.rgba(root.pianoSurface.r, root.pianoSurface.g, root.pianoSurface.b, 0.78)
                 radius: Style.space(2)
               }
@@ -908,7 +1144,7 @@ Panel {
                 anchors.bottom: blackNoteLabel.top
                 anchors.bottomMargin: Style.space(3)
                 text: modelData.letter
-                color: parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface
+                color: parent.sounding || parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface
                   : (parent.scaleTone ? root.foreground : root.pianoMuted)
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
@@ -920,7 +1156,7 @@ Panel {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Style.space(6)
                 text: Model.noteName(parent.midi)
-                color: parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface : root.pianoMuted
+                color: parent.sounding || parent.adjusted || root.activeMidi === parent.midi ? root.pianoSurface : root.pianoMuted
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
               }

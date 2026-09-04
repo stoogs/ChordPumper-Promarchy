@@ -2,6 +2,12 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.7.2 — 2026-09-04
+
+- Added Basic Character and Pro Cinematic controls, with keyboard stepping and reset gestures.
+- Added an original 1–0 chord demo cue with a sound-factor sweep and a scale-aware pop hook.
+- Added up to five independently held manual piano notes and matching multi-key keyboard highlights.
+
 ## 1.7.1 — 2026-09-03
 
 - Made Basic Keys faster, warmer, and more expressive with pitch-aware organ voicing and subtle soft drive.
