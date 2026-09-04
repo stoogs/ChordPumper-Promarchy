@@ -26,7 +26,7 @@ Panel {
 
   property int keyRoot: 0
   property string scaleType: "major"
-  property string scaleLockMode: "nearest"
+  property string scaleLockMode: "off"
   property bool keyPickerOpen: false
   property bool scalePickerOpen: false
   property int lastScaleShift: 0
