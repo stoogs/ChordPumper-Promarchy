@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from array import array
 from collections import deque
+import fcntl
 import json
 import math
 import os
@@ -35,7 +36,10 @@ EXPORT_DIRECTORY_PARTS = ("Music", "ChordPumper Promarchy")
 EXPORT_FILENAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,199}\.mid")
 BASIC_SAMPLE_RATE = 48_000
 BASIC_CHANNELS = 2
-BASIC_CHUNK_FRAMES = 1024
+BASIC_SAMPLE_BYTES = 2
+BASIC_PIPEWIRE_LATENCY_FRAMES = 1024
+BASIC_CHUNK_FRAMES = 256
+BASIC_PIPE_BUFFER_BYTES = BASIC_PIPEWIRE_LATENCY_FRAMES * BASIC_CHANNELS * BASIC_SAMPLE_BYTES
 MAX_BASIC_VOICES = 32
 
 def variable_length(value: int) -> bytes:
@@ -368,7 +372,7 @@ def serve_basic(pro_available: bool) -> int:
                 "--rate", str(BASIC_SAMPLE_RATE),
                 "--channels", str(BASIC_CHANNELS),
                 "--format", "s16",
-                "--latency", str(BASIC_CHUNK_FRAMES),
+                "--latency", str(BASIC_PIPEWIRE_LATENCY_FRAMES),
                 "-",
             ],
             stdin=subprocess.PIPE,
@@ -517,6 +521,7 @@ def serve_basic(pro_available: bool) -> int:
     try:
         if player.stdin is None or player.stderr is None:
             raise RuntimeError("could not open PipeWire supervision channels")
+        fcntl.fcntl(player.stdin.fileno(), fcntl.F_SETPIPE_SZ, BASIC_PIPE_BUFFER_BYTES)
         stderr_thread = threading.Thread(target=drain_player_stderr, daemon=True)
         writer_thread = threading.Thread(target=write_basic_audio, daemon=True)
         stderr_thread.start()

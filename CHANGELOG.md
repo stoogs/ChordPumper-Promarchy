@@ -2,6 +2,10 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 1.7.4 — 2026-09-06
+
+- Removed the large hidden PCM queue from Basic Keys, bringing key response much closer to Pro while retaining PipeWire's stable playback block.
+
 ## 1.7.3 — 2026-09-04
 
 - Defaulted Scale Lock to Off so the style's `1–0` chord palette plays unchanged until locking is deliberately enabled.
