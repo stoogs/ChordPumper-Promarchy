@@ -41,6 +41,18 @@ BASIC_PIPEWIRE_LATENCY_FRAMES = 1024
 BASIC_CHUNK_FRAMES = 256
 BASIC_PIPE_BUFFER_BYTES = BASIC_PIPEWIRE_LATENCY_FRAMES * BASIC_CHANNELS * BASIC_SAMPLE_BYTES
 MAX_BASIC_VOICES = 32
+SYNTH_VOICE_COUNT = 6
+PRO_SYNTH_PROGRAMS = (
+    (90, 89, 0.18),  # Polysynth + Warm Pad
+    (46, 99, 0.36),  # Orchestral Harp + Atmosphere
+    (19, 29, 0.44),  # Church Organ + Overdriven Guitar
+    (73, 94, 0.38),  # Flute + Halo Pad
+    (56, 57, 0.58),  # Trumpet + Trombone
+    (52, 89, 0.42),  # Choir Aahs + Warm Pad
+    (98, 54, 0.40),  # Crystal + Synth Voice
+    (42, 49, 0.42),  # Cello + Slow Strings
+)
+PRO_SYNTH_ATTACKS = (30, 12, 26, 42, 30, 48, 18, 58)
 
 def variable_length(value: int) -> bytes:
     buffer = value & 0x7F
@@ -357,7 +369,9 @@ def read_control_line() -> dict | None:
     return message
 
 
-def serve_basic(pro_available: bool) -> int:
+def serve_basic(pro_available: bool, instrument: str = "basic") -> int:
+    if instrument not in {"basic", "synth"}:
+        raise ValueError("built-in instrument must be basic or synth")
     executable = trusted_pw_cat()
     shutdown_signals = {signal.SIGINT, signal.SIGTERM}
     old_sigint = signal.getsignal(signal.SIGINT)
@@ -406,6 +420,13 @@ def serve_basic(pro_available: bool) -> int:
     def write_basic_audio() -> None:
         voices: dict[int, dict[str, float | bool]] = {}
         character = 50
+        synth_voice = 0
+        synth_cutoff = 58
+        synth_shape = 35
+        synth_space = 55
+        synth_release = 60
+        delay_line = [0.0] * 2048
+        delay_position = 0
         try:
             while not writer_stop.is_set():
                 released_this_batch: set[int] = set()
@@ -417,6 +438,13 @@ def serve_basic(pro_available: bool) -> int:
                     kind = item[0]
                     if kind == "character":
                         character = item[1]
+                        continue
+                    if kind == "synth_settings":
+                        synth_voice, synth_cutoff, synth_shape, synth_space, synth_release = item[1:]
+                        release_seconds = 0.06 * (30.0 ** (synth_release / 100.0))
+                        release_rate = math.exp(math.log(0.001) / (release_seconds * BASIC_SAMPLE_RATE))
+                        for voice in voices.values():
+                            voice["release_rate"] = release_rate
                         continue
                     if kind == "note_on":
                         note, velocity = item[1], item[2]
@@ -431,8 +459,11 @@ def serve_basic(pro_available: bool) -> int:
                         low_taming = 0.62 + 0.38 * low_blend
                         if note not in voices and len(voices) >= MAX_BASIC_VOICES:
                             voices.pop(next(iter(voices)))
+                        release_seconds = 0.06 * (30.0 ** (synth_release / 100.0))
                         voices[note] = {
                             "phase": 0.0,
+                            "phase_two": 0.0,
+                            "sub_phase": 0.0,
                             "age": 0.0,
                             "phase_step": 2.0 * math.pi * 440.0 * (2.0 ** ((note - 69) / 12.0)) / BASIC_SAMPLE_RATE,
                             "fundamental": 0.88 + 0.12 * low_blend,
@@ -447,7 +478,9 @@ def serve_basic(pro_available: bool) -> int:
                             "velocity": velocity / 127.0,
                             "released": False,
                             "release": 1.0,
-                            "release_rate": 0.9988 + 0.00075 * low_blend,
+                            "release_rate": math.exp(math.log(0.001) / (release_seconds * BASIC_SAMPLE_RATE))
+                            if instrument == "synth" else 0.9988 + 0.00075 * low_blend,
+                            "filter": 0.0,
                         }
                     elif kind == "note_off" and item[1] in voices:
                         voices[item[1]]["released"] = True
@@ -459,38 +492,92 @@ def serve_basic(pro_available: bool) -> int:
 
                 pcm = array("h")
                 remove_notes: set[int] = set()
+                cutoff_hz = min(15_000.0, 110.0 * (2.0 ** (synth_cutoff / 13.0)))
+                filter_coefficient = 1.0 - math.exp(-2.0 * math.pi * cutoff_hz / BASIC_SAMPLE_RATE)
+                synth_edge = synth_shape / 100.0
+                delay_frames = 96 + round(synth_space * 6.5)
+                space_mix = synth_space * 0.0038
                 for _frame in range(BASIC_CHUNK_FRAMES):
                     mixed = 0.0
                     for note, voice in voices.items():
                         phase = float(voice["phase"])
                         age = float(voice["age"])
                         release = float(voice["release"])
-                        attack = min(1.0, age / (BASIC_SAMPLE_RATE * 0.0015))
-                        harmonic_scale = 0.65 + character * 0.007
-                        tone = (
-                            float(voice["fundamental"]) * math.sin(phase)
-                            + harmonic_scale * float(voice["second"]) * math.sin(phase * 2.0)
-                            + harmonic_scale * float(voice["third"]) * math.sin(phase * 3.0)
-                        ) / 1.45
-                        upper_warmth = float(voice["upper_warmth"])
-                        if upper_warmth > 0.0:
-                            rounded_tone = math.tanh(tone * 1.6) / 1.6
-                            tone = tone * (1.0 - upper_warmth) + rounded_tone * upper_warmth
+                        if instrument == "synth":
+                            sine = math.sin(phase)
+                            triangle = 2.0 / math.pi * math.asin(sine)
+                            saw = phase / math.pi - 1.0
+                            phase_two = float(voice["phase_two"])
+                            detuned_saw = phase_two / math.pi - 1.0
+                            sub_sine = math.sin(float(voice["sub_phase"]))
+                            pulse_width = 0.18 + synth_edge * 0.52
+                            pulse = 1.0 if phase < 2.0 * math.pi * pulse_width else -1.0
+                            if synth_voice == 0:  # Analogue Silk
+                                raw_tone = sine * 0.24 + triangle * 0.18 + saw * (0.34 + synth_edge * 0.08) + detuned_saw * 0.14
+                                attack_seconds, decay_seconds, sustain = 0.11, 0.82, 0.88
+                            elif synth_voice == 1:  # Velvet Choir
+                                raw_tone = sine * 0.34 + triangle * 0.22 + detuned_saw * 0.22 + math.sin(phase * 2.0) * 0.12
+                                attack_seconds, decay_seconds, sustain = 0.14, 0.95, 0.90
+                            elif synth_voice == 2:  # Moon Harp
+                                pluck = math.exp(-age / (BASIC_SAMPLE_RATE * 0.34))
+                                raw_tone = sine * 0.40 + triangle * 0.20 + math.sin(phase * 3.0) * pluck * 0.32
+                                attack_seconds, decay_seconds, sustain = 0.002, 0.42, 0.24
+                            elif synth_voice == 3:  # Glass Lead
+                                raw_tone = sine * 0.48 + math.sin(phase * 2.0) * 0.30 + math.sin(phase * 3.0) * (0.12 + synth_edge * 0.10)
+                                attack_seconds, decay_seconds, sustain = 0.002, 0.34, 0.80
+                            elif synth_voice == 4:  # Aurora Flute
+                                raw_tone = sine * 0.66 + triangle * 0.18 + math.sin(phase * 2.0) * 0.10 + detuned_saw * 0.06
+                                attack_seconds, decay_seconds, sustain = 0.10, 0.72, 0.88
+                            else:  # Shadow Cello
+                                raw_tone = sine * 0.44 + triangle * 0.30 + detuned_saw * 0.16 + sub_sine * 0.10
+                                attack_seconds, decay_seconds, sustain = 0.12, 0.95, 0.92
+                            attack_samples = max(1.0, attack_seconds * BASIC_SAMPLE_RATE)
+                            if age < attack_samples:
+                                envelope = age / attack_samples
+                            else:
+                                decay_age = age - attack_samples
+                                envelope = sustain + (1.0 - sustain) * math.exp(-decay_age / (decay_seconds * BASIC_SAMPLE_RATE))
+                            filtered = float(voice["filter"]) + filter_coefficient * (raw_tone - float(voice["filter"]))
+                            voice["filter"] = filtered
+                            tone = filtered * 0.72
+                            attack = envelope
+                        else:
+                            attack = min(1.0, age / (BASIC_SAMPLE_RATE * 0.0015))
+                            harmonic_scale = 0.65 + character * 0.007
+                            tone = (
+                                float(voice["fundamental"]) * math.sin(phase)
+                                + harmonic_scale * float(voice["second"]) * math.sin(phase * 2.0)
+                                + harmonic_scale * float(voice["third"]) * math.sin(phase * 3.0)
+                            ) / 1.45
+                            upper_warmth = float(voice["upper_warmth"])
+                            if upper_warmth > 0.0:
+                                rounded_tone = math.tanh(tone * 1.6) / 1.6
+                                tone = tone * (1.0 - upper_warmth) + rounded_tone * upper_warmth
                         mixed += tone * attack * release * float(voice["velocity"]) * float(voice["level"])
                         voice["phase"] = (phase + float(voice["phase_step"])) % (2.0 * math.pi)
+                        voice["phase_two"] = (float(voice["phase_two"]) + float(voice["phase_step"]) * 1.006) % (2.0 * math.pi)
+                        voice["sub_phase"] = (float(voice["sub_phase"]) + float(voice["phase_step"]) * 0.5) % (2.0 * math.pi)
                         voice["age"] = age + 1.0
                         if bool(voice["released"]):
                             release *= float(voice["release_rate"])
                             voice["release"] = release
                             if release < 0.001:
                                 remove_notes.add(note)
-                    clean = mixed * 0.27
-                    softly_driven = math.tanh(clean * 2.0) / 2.0
-                    drive_mix = character * 0.004
-                    shaped = clean * (1.0 - drive_mix) + softly_driven * drive_mix
-                    sample = max(-32767, min(32767, round(shaped * 32767)))
-                    pcm.append(sample)
-                    pcm.append(sample)
+                    clean = mixed * (0.23 if instrument == "synth" else 0.27)
+                    if instrument == "synth":
+                        shaped = math.tanh(clean * (1.15 + synth_edge * 0.95)) / (1.15 + synth_edge * 0.95)
+                        delayed = delay_line[(delay_position - delay_frames) % len(delay_line)]
+                        delay_line[delay_position] = shaped
+                        delay_position = (delay_position + 1) % len(delay_line)
+                        left = shaped * (1.0 - space_mix * 0.12) + delayed * space_mix * 0.12
+                        right = shaped * (1.0 - space_mix) + delayed * space_mix
+                    else:
+                        softly_driven = math.tanh(clean * 2.0) / 2.0
+                        drive_mix = character * 0.004
+                        left = clean * (1.0 - drive_mix) + softly_driven * drive_mix
+                        right = left
+                    pcm.append(max(-32767, min(32767, round(left * 32767))))
+                    pcm.append(max(-32767, min(32767, round(right * 32767))))
                 for note in remove_notes:
                     voices.pop(note, None)
                 if player.stdin is None:
@@ -531,7 +618,7 @@ def serve_basic(pro_available: bool) -> int:
         signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
         print(json.dumps({
             "type": "ready",
-            "backend": "basic",
+            "backend": instrument,
             "proAvailable": pro_available,
         }), flush=True)
         requested_notes: set[int] = set()
@@ -562,6 +649,13 @@ def serve_basic(pro_available: bool) -> int:
                 elif kind == "character":
                     character = bounded_int(message, "value", 0, 100)
                     queue_audio(("character", character))
+                elif kind == "synth_settings":
+                    voice = bounded_int(message, "voice", 0, SYNTH_VOICE_COUNT - 1)
+                    cutoff = bounded_int(message, "cutoff", 0, 100)
+                    shape = bounded_int(message, "shape", 0, 100)
+                    space = bounded_int(message, "space", 0, 100)
+                    release = bounded_int(message, "release", 0, 100)
+                    queue_audio(("synth_settings", voice, cutoff, shape, space, release))
                 elif kind == "quit":
                     break
                 else:
@@ -590,7 +684,9 @@ def serve_basic(pro_available: bool) -> int:
     return 0
 
 
-def serve_fluid() -> int:
+def serve_fluid(instrument: str = "fluid") -> int:
+    if instrument not in {"fluid", "keyboard-fluid", "synth-fluid"}:
+        raise ValueError("unsupported FluidSynth instrument")
     executable = trusted_fluidsynth()
     soundfont = find_soundfont()
     shutdown_signals = {signal.SIGINT, signal.SIGTERM}
@@ -636,6 +732,7 @@ def serve_fluid() -> int:
             return
         try:
             command("cc 0 123 0")
+            command("cc 1 123 0")
             command("quit")
         finally:
             if synth.stdin is not None and not synth.stdin.closed:
@@ -658,6 +755,60 @@ def serve_fluid() -> int:
         command(f"set synth.chorus.level {0.60 + width * 0.50:.2f}")
         command(f"set synth.chorus.nr {3 + round(width * 2)}")
 
+    pro_synth_secondary_gain = PRO_SYNTH_PROGRAMS[0][2]
+    keyboard_secondary_gain = 0.48
+
+    def set_keyboard_tone(value: int) -> None:
+        nonlocal keyboard_secondary_gain
+        amount = value / 100.0
+        keyboard_secondary_gain = 0.22 + amount * 0.44
+        brightness = round(48 + amount * 79)
+        resonance = round(18 + amount * 64)
+        command(f"cc 0 74 {brightness}")
+        command(f"cc 0 71 {resonance}")
+        command(f"cc 1 74 {min(127, brightness + 8)}")
+        command(f"cc 1 71 {min(127, resonance + 10)}")
+        command(f"cc 0 91 {round(32 + amount * 28)}")
+        command(f"cc 0 93 {round(14 + amount * 30)}")
+        command(f"cc 1 91 {round(44 + amount * 34)}")
+        command(f"cc 1 93 {round(36 + amount * 48)}")
+
+    def set_pro_synth(voice: int, cutoff: int, shape: int, space: int, release: int) -> None:
+        nonlocal pro_synth_secondary_gain
+        primary_program, secondary_program, pro_synth_secondary_gain = PRO_SYNTH_PROGRAMS[voice]
+        command(f"prog 0 {primary_program}")
+        command(f"prog 1 {secondary_program}")
+        brightness = min(127, 8 + round(cutoff * 1.19))
+        resonance = min(127, round(shape * 1.27))
+        reverb = min(127, 14 + round(space * 0.92))
+        chorus = min(127, round(space * 1.05))
+        release_time = min(127, 18 + round(release * 1.02))
+        attack_time = PRO_SYNTH_ATTACKS[voice]
+        for channel in (0, 1):
+            command(f"cc {channel} 74 {brightness}")
+            command(f"cc {channel} 71 {resonance}")
+            command(f"cc {channel} 72 {release_time}")
+            command(f"cc {channel} 73 {attack_time}")
+            command(f"cc {channel} 91 {reverb}")
+            command(f"cc {channel} 93 {chorus}")
+        if voice == 0:
+            # A quieter warm layer and broad chorus give the polysynth core
+            # an Oberheim-like width without audible pitch competition.
+            command(f"cc 1 74 {max(22, brightness - 8)}")
+            command(f"cc 1 71 {max(12, resonance - 6)}")
+            command(f"cc 1 93 {min(127, chorus + 8)}")
+        elif voice == 2:
+            # The overdriven-guitar reinforcement should contribute girth,
+            # not its piercing pick edge. Keep it darker than the organ as
+            # the shared cutoff moves.
+            command(f"cc 1 74 {max(18, brightness - 18)}")
+            command(f"cc 1 71 {max(12, resonance - 10)}")
+        elif voice == 4:
+            # Trombone should thicken the trumpet's lower mids without
+            # doubling its bright edge.
+            command(f"cc 1 74 {max(22, brightness - 10)}")
+            command(f"cc 1 71 {max(12, resonance - 8)}")
+
     try:
         if synth.stdin is None or synth.stderr is None:
             raise RuntimeError("could not open FluidSynth supervision channels")
@@ -666,10 +817,20 @@ def serve_fluid() -> int:
         signal.signal(signal.SIGINT, request_shutdown)
         signal.signal(signal.SIGTERM, request_shutdown)
         signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
-        command("prog 0 0")
+        if instrument == "synth-fluid":
+            command("prog 0 89")
+            command("prog 1 49")
+        elif instrument == "keyboard-fluid":
+            # Layer FluidR3's electric pianos for a firm tine attack and a
+            # quieter, wider suitcase-style body.
+            command("prog 0 4")
+            command("prog 1 5")
+            set_keyboard_tone(60)
+        else:
+            command("prog 0 0")
         print(json.dumps({
             "type": "ready",
-            "backend": "fluid",
+            "backend": instrument,
             "proAvailable": True,
             "soundfont": soundfont,
         }), flush=True)
@@ -683,14 +844,31 @@ def serve_fluid() -> int:
                     note = bounded_int(message, "note", 0, 127)
                     velocity = bounded_int(message, "velocity", 1, 127, 100)
                     command(f"noteon 0 {note} {velocity}")
+                    if instrument == "synth-fluid":
+                        command(f"noteon 1 {note} {max(1, round(velocity * pro_synth_secondary_gain))}")
+                    elif instrument == "keyboard-fluid":
+                        command(f"noteon 1 {note} {max(1, round(velocity * keyboard_secondary_gain))}")
                 elif kind == "note_off":
-                    command(f"noteoff 0 {bounded_int(message, 'note', 0, 127)}")
+                    note = bounded_int(message, "note", 0, 127)
+                    command(f"noteoff 0 {note}")
+                    if instrument in {"keyboard-fluid", "synth-fluid"}:
+                        command(f"noteoff 1 {note}")
                 elif kind == "program":
                     command(f"prog 0 {bounded_int(message, 'program', 0, 127)}")
                 elif kind == "cinematic":
                     set_cinematic(bounded_int(message, "value", 0, 100))
+                elif kind == "keyboard_tone":
+                    set_keyboard_tone(bounded_int(message, "value", 0, 100))
+                elif kind == "synth_settings":
+                    voice = bounded_int(message, "voice", 0, len(PRO_SYNTH_PROGRAMS) - 1)
+                    cutoff = bounded_int(message, "cutoff", 0, 100)
+                    shape = bounded_int(message, "shape", 0, 100)
+                    space = bounded_int(message, "space", 0, 100)
+                    release = bounded_int(message, "release", 0, 100)
+                    set_pro_synth(voice, cutoff, shape, space, release)
                 elif kind == "all_off":
                     command("cc 0 123 0")
+                    command("cc 1 123 0")
                 elif kind == "quit":
                     break
                 else:
@@ -722,8 +900,18 @@ def serve(backend: str) -> int:
         if not pro_available:
             raise RuntimeError("Pro audio requires FluidSynth and the FluidR3 SoundFont")
         return serve_fluid()
+    if selected == "keyboard-fluid":
+        if not pro_available:
+            raise RuntimeError("Electric Keyboard requires FluidSynth and the FluidR3 SoundFont")
+        return serve_fluid("keyboard-fluid")
     if selected == "basic":
         return serve_basic(pro_available)
+    if selected == "synth":
+        return serve_basic(pro_available, "synth")
+    if selected == "synth-fluid":
+        if not pro_available:
+            raise RuntimeError("Pro Synth requires FluidSynth and the FluidR3 SoundFont")
+        return serve_fluid("synth-fluid")
     raise RuntimeError("unsupported audio backend")
 
 
@@ -733,7 +921,7 @@ def main() -> int:
     parser.add_argument("--output")
     parser.add_argument("--tempo", type=int, default=110)
     parser.add_argument("--events")
-    parser.add_argument("--backend", choices=("auto", "basic", "fluid"), default="auto")
+    parser.add_argument("--backend", choices=("auto", "basic", "fluid", "keyboard-fluid", "synth", "synth-fluid"), default="auto")
     args = parser.parse_args()
 
     if args.action == "serve":

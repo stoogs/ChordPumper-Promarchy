@@ -14,6 +14,7 @@ from pathlib import Path
 from engine.chordpumper_engine import (
     MAX_EVENTS,
     MAX_EVENTS_JSON_BYTES,
+    PRO_SYNTH_PROGRAMS,
     atomic_write_no_follow,
     midi_bytes,
     parse_events,
@@ -174,6 +175,22 @@ class AudioBackendTests(unittest.TestCase):
             self.assertEqual(serve("auto"), 23)
             basic.assert_called_once_with(False)
             fluid.assert_not_called()
+
+    def test_routes_pro_synth_to_fluidsynth_bank(self):
+        with (
+            mock.patch("engine.chordpumper_engine.pro_audio_available", return_value=True),
+            mock.patch("engine.chordpumper_engine.serve_fluid", return_value=29) as fluid,
+        ):
+            self.assertEqual(serve("synth-fluid"), 29)
+            fluid.assert_called_once_with("synth-fluid")
+
+    def test_pro_synth_has_eight_contrasting_voices(self):
+        self.assertEqual(len(PRO_SYNTH_PROGRAMS), 8)
+        self.assertEqual(PRO_SYNTH_PROGRAMS[0][:2], (90, 89))
+        self.assertEqual(PRO_SYNTH_PROGRAMS[1][:2], (46, 99))
+        self.assertEqual(PRO_SYNTH_PROGRAMS[2][:2], (19, 29))
+        self.assertEqual(PRO_SYNTH_PROGRAMS[4][:2], (56, 57))
+        self.assertEqual(PRO_SYNTH_PROGRAMS[7][:2], (42, 49))
 
     def test_basic_backend_rejects_more_than_32_active_voices(self):
         fake_player = "#!/usr/bin/python3\nimport sys\nsys.stdin.buffer.read()\n"

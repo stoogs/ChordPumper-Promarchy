@@ -23,6 +23,18 @@ Panel {
   readonly property color pianoMuted: Color.muted
   readonly property color pianoPressed: Color.accent
   readonly property color pianoAdjusted: Color.urgent
+  readonly property color pianoGold: "#d6aa5c"
+  readonly property int synthPanelBudget: 760
+  readonly property int synthMainLabelWidth: 40
+  readonly property int synthVoiceDropdownWidth: 118
+  readonly property int synthParameterLabelWidth: 57
+  readonly property int synthParameterSliderWidth: 50
+  readonly property int synthCutoffShortcutWidth: 48
+  readonly property int synthCutoffLabelWidth: 65
+  readonly property int synthCutoffSliderWidth: 80
+  readonly property int synthControlGap: 7
+  readonly property int synthInnerGap: 4
+  readonly property int synthOuterGap: 8
 
   property int keyRoot: 0
   property string scaleType: "major"
@@ -49,7 +61,50 @@ Panel {
   property bool proAudioAvailable: false
   property bool audioRestarting: false
   property int basicCharacter: 50
+  property int keyboardTone: 60
   property int cinematicFactor: 0
+  property int synthVoiceIndex: 0
+  property int synthCutoff: 58
+  property int synthShape: 32
+  property int synthSpace: 62
+  property int synthRelease: 68
+  property string synthBank: "basic"
+  property int proSynthVoiceIndex: 0
+  property int proSynthCutoff: 58
+  property int proSynthShape: 38
+  property int proSynthSpace: 68
+  property int proSynthRelease: 62
+  readonly property var synthVoices: [
+    { name: "Analogue Silk", cutoff: 60, shape: 38, space: 64, release: 68 },
+    { name: "Velvet Choir", cutoff: 58, shape: 24, space: 84, release: 76 },
+    { name: "Moon Harp", cutoff: 70, shape: 18, space: 82, release: 60 },
+    { name: "Glass Lead", cutoff: 78, shape: 24, space: 52, release: 40 },
+    { name: "Aurora Flute", cutoff: 66, shape: 20, space: 78, release: 68 },
+    { name: "Shadow Cello", cutoff: 48, shape: 20, space: 72, release: 65 }
+  ]
+  readonly property var synthVoiceOptions: [
+    { value: "0", label: "Analogue Silk" }, { value: "1", label: "Velvet Choir" },
+    { value: "2", label: "Moon Harp" }, { value: "3", label: "Glass Lead" },
+    { value: "4", label: "Aurora Flute" }, { value: "5", label: "Shadow Cello" }
+  ]
+  readonly property var proSynthVoices: [
+    { name: "Analogue Silk", cutoff: 60, shape: 38, space: 64, release: 68 },
+    { name: "Moon Harp", cutoff: 70, shape: 18, space: 82, release: 60 },
+    { name: "Iron Cathedral", cutoff: 50, shape: 52, space: 72, release: 60 },
+    { name: "Aurora Flute", cutoff: 66, shape: 20, space: 78, release: 68 },
+    { name: "Dirty Trumpet", cutoff: 70, shape: 68, space: 40, release: 42 },
+    { name: "Velvet Choir", cutoff: 58, shape: 24, space: 84, release: 76 },
+    { name: "Glass Lead", cutoff: 82, shape: 44, space: 64, release: 42 },
+    { name: "Shadow Cello", cutoff: 48, shape: 20, space: 72, release: 65 }
+  ]
+  readonly property var proSynthVoiceOptions: [
+    { value: "0", label: "Analogue Silk" }, { value: "1", label: "Moon Harp" },
+    { value: "2", label: "Iron Cathedral" }, { value: "3", label: "Aurora Flute" },
+    { value: "4", label: "Dirty Trumpet" }, { value: "5", label: "Velvet Choir" },
+    { value: "6", label: "Glass Lead" }, { value: "7", label: "Shadow Cello" }
+  ]
+  readonly property bool synthSelected: activeAudioBackend === "synth" || activeAudioBackend === "synth-fluid"
+    || (audioRestarting && (audioBackendPreference === "synth" || audioBackendPreference === "synth-fluid"))
   property int cinematicCueIndex: 0
   property var cinematicCueNotes: []
   property int cueAccentIndex: 0
@@ -57,13 +112,18 @@ Panel {
   property bool cueUsesBasic: false
   property bool cueSoundActive: false
   property int cueSavedSoundFactor: 0
-  readonly property string proHelpText: "Want the richer Pro piano sound? Follow the GitHub instructions to install Omarchy's optional FluidSynth packages."
+  readonly property string proHelpText: "Want Electric Keyboard, Piano, and Pro Synth sounds? Follow the GitHub instructions to install Omarchy's optional FluidSynth packages."
   readonly property string proHelpUrl: "https://github.com/stoogs/ChordPumper-Promarchy#optional-pro-piano"
   property int styleIndex: 0
-  property bool stylePickerOpen: false
   property string chordPaletteMode: "core"
   property int chordPaletteSeed: 1
   readonly property var styles: Styles.all()
+  readonly property var styleOptions: {
+    var options = []
+    for (var index = 0; index < styles.length; index++)
+      options.push({ value: String(index), label: styles[index].name })
+    return options
+  }
   readonly property var currentStyle: Styles.at(styleIndex)
   readonly property var chords: Styles.chordsFor(styleIndex, keyRoot, chordPaletteMode, chordPaletteSeed)
   property string statusText: "Keyboard ready · audio engine is the next milestone"
@@ -119,11 +179,14 @@ Panel {
   function toggle() { if (root.opened) close(); else open() }
   function selectAudioBackend(backend) {
     if (backend === activeAudioBackend && audioReady) {
-      statusText = backend === "fluid" ? "Pro piano is active" : "Basic keys are active"
+      statusText = backend === "fluid" ? "Piano is active"
+        : backend === "keyboard-fluid" ? "Electric Keyboard is active"
+        : backend === "synth" || backend === "synth-fluid" ? (synthBank === "pro" ? "Pro Synth is active" : "Basic Synth is active")
+        : "Organ is active"
       keyArea.forceActiveFocus()
       return
     }
-    if (backend === "fluid" && !proAudioAvailable) {
+    if ((backend === "fluid" || backend === "keyboard-fluid" || backend === "synth-fluid") && !proAudioAvailable) {
       statusText = proHelpText
       keyArea.forceActiveFocus()
       return
@@ -132,7 +195,10 @@ Panel {
     audioReady = false
     audioBackendPreference = backend
     audioRestarting = true
-    statusText = backend === "fluid" ? "Starting Pro piano…" : "Starting Basic keys…"
+    statusText = backend === "fluid" ? "Starting Piano…"
+      : backend === "keyboard-fluid" ? "Starting Electric Keyboard…"
+      : backend === "synth-fluid" ? "Starting Pro Synth…"
+      : backend === "synth" ? "Starting Basic Synth…" : "Starting Organ…"
     if (audioProcess.running) audioProcess.running = false
     else {
       audioRestarting = false
@@ -159,9 +225,80 @@ Panel {
     statusText = "Cinematic " + cinematicFactor + " · "
       + (cinematicFactor < 34 ? "natural piano" : cinematicFactor > 66 ? "wide and atmospheric" : "spacious piano")
   }
+  function setKeyboardTone(value) {
+    keyboardTone = Math.max(0, Math.min(100, Math.round(value)))
+    if (audioProcess.running && audioReady && activeAudioBackend === "keyboard-fluid")
+      audioProcess.write(JSON.stringify({ type: "keyboard_tone", value: keyboardTone }) + "\n")
+    statusText = "Electric Keyboard tone " + keyboardTone + " · "
+      + (keyboardTone < 34 ? "warm" : keyboardTone > 66 ? "bell and bite" : "full-bodied")
+  }
   function adjustSoundFactor(delta) {
     if (activeAudioBackend === "fluid") setCinematic(cinematicFactor + delta)
+    else if (activeAudioBackend === "keyboard-fluid") setKeyboardTone(keyboardTone + delta)
+    else if (synthSelected) setSynthCutoff(currentSynthCutoff() + delta)
     else if (activeAudioBackend === "basic") setBasicCharacter(basicCharacter + delta)
+    keyArea.forceActiveFocus()
+  }
+  function currentSynthVoices() { return synthBank === "pro" ? proSynthVoices : synthVoices }
+  function currentSynthVoiceOptions() { return synthBank === "pro" ? proSynthVoiceOptions : synthVoiceOptions }
+  function currentSynthVoiceIndex() { return synthBank === "pro" ? proSynthVoiceIndex : synthVoiceIndex }
+  function currentSynthCutoff() { return synthBank === "pro" ? proSynthCutoff : synthCutoff }
+  function currentSynthShape() { return synthBank === "pro" ? proSynthShape : synthShape }
+  function currentSynthSpace() { return synthBank === "pro" ? proSynthSpace : synthSpace }
+  function currentSynthRelease() { return synthBank === "pro" ? proSynthRelease : synthRelease }
+  function activateKeyboard() { selectAudioBackend("keyboard-fluid") }
+  function activateProSynth() { synthBank = "pro"; selectAudioBackend("synth-fluid") }
+  function sendSynthSettings() {
+    if (audioProcess.running && audioReady && (activeAudioBackend === "synth" || activeAudioBackend === "synth-fluid"))
+      audioProcess.write(JSON.stringify({ type: "synth_settings", voice: currentSynthVoiceIndex(),
+        cutoff: currentSynthCutoff(), shape: currentSynthShape(), space: currentSynthSpace(),
+        release: currentSynthRelease() }) + "\n")
+  }
+  function setSynthCutoff(value) {
+    var next = Math.max(0, Math.min(100, Math.round(value)))
+    if (synthBank === "pro") proSynthCutoff = next
+    else synthCutoff = next
+    sendSynthSettings()
+    statusText = currentSynthVoices()[currentSynthVoiceIndex()].name + " · cutoff " + next
+  }
+  function setSynthShape(value) {
+    var next = Math.max(0, Math.min(100, Math.round(value)))
+    if (synthBank === "pro") proSynthShape = next
+    else synthShape = next
+    sendSynthSettings()
+    statusText = currentSynthVoices()[currentSynthVoiceIndex()].name + " · resonance " + next
+  }
+  function setSynthSpace(value) {
+    var next = Math.max(0, Math.min(100, Math.round(value)))
+    if (synthBank === "pro") proSynthSpace = next
+    else synthSpace = next
+    sendSynthSettings()
+    statusText = currentSynthVoices()[currentSynthVoiceIndex()].name + " · space " + next
+  }
+  function setSynthRelease(value) {
+    var next = Math.max(0, Math.min(100, Math.round(value)))
+    if (synthBank === "pro") proSynthRelease = next
+    else synthRelease = next
+    sendSynthSettings()
+    statusText = currentSynthVoices()[currentSynthVoiceIndex()].name + " · release " + next
+  }
+  function selectSynthVoice(index) {
+    var preset = currentSynthVoices()[index]
+    if (synthBank === "pro") {
+      proSynthVoiceIndex = index
+      proSynthCutoff = preset.cutoff
+      proSynthShape = preset.shape
+      proSynthSpace = preset.space
+      proSynthRelease = preset.release
+    } else {
+      synthVoiceIndex = index
+      synthCutoff = preset.cutoff
+      synthShape = preset.shape
+      synthSpace = preset.space
+      synthRelease = preset.release
+    }
+    sendSynthSettings()
+    statusText = (synthBank === "pro" ? "Pro Synth · " : "Basic Synth · ") + preset.name
     keyArea.forceActiveFocus()
   }
   function stopCinematicCue() {
@@ -182,6 +319,10 @@ Panel {
   }
   function playCinematicCue() {
     if (!audioProcess.running || !audioReady) return
+    if (synthSelected) {
+      statusText = "Synth ready · play the 1–0 chord palette"
+      return
+    }
     stopCinematicCue()
     cueUsesBasic = activeAudioBackend === "basic"
     cueSavedSoundFactor = cueUsesBasic ? basicCharacter : cinematicFactor
@@ -221,7 +362,6 @@ Panel {
   function applyStyle(index) {
     stopActiveNotes()
     styleIndex = ((index % styles.length) + styles.length) % styles.length
-    stylePickerOpen = false
     temporaryModifierIndex = -1
     lockedModifier = ""
     modifier = ""
@@ -327,7 +467,7 @@ Panel {
     if (event.key === Qt.Key_BracketLeft) { adjustSoundFactor(-10); event.accepted = true; return }
     if (event.key === Qt.Key_BracketRight) { adjustSoundFactor(10); event.accepted = true; return }
     if (event.key === Qt.Key_Escape) { close(); event.accepted = true; return }
-    if (event.key === Qt.Key_Z) { octave = Math.max(3, octave - 1); statusText = octave === 3 ? "Octave 3 · lowest range" : "Octave " + octave; event.accepted = true; return }
+    if (event.key === Qt.Key_Z) { octave = Math.max(2, octave - 1); statusText = octave === 2 ? "Octave 2 · lowest range" : "Octave " + octave; event.accepted = true; return }
     if (event.key === Qt.Key_X) { octave = Math.min(6, octave + 1); statusText = octave === 6 ? "Octave 6 · highest range" : "Octave " + octave; event.accepted = true; return }
     if (event.text === "<") {
       cycleStyle(); event.accepted = true; return
@@ -528,12 +668,21 @@ Panel {
         activeAudioBackend = String(message.backend || "fluid")
         proAudioAvailable = message.proAvailable === true
         statusText = activeAudioBackend === "fluid"
-          ? "Audio ready · Pro Acoustic Grand Piano"
+          ? "Audio ready · Acoustic Grand Piano"
+          : activeAudioBackend === "keyboard-fluid"
+            ? "Audio ready · Electric Keyboard"
+          : activeAudioBackend === "synth" || activeAudioBackend === "synth-fluid"
+            ? "Audio ready · " + (synthBank === "pro" ? "Pro Synth · " : "Basic Synth · ")
+              + currentSynthVoices()[currentSynthVoiceIndex()].name
           : proAudioAvailable
-            ? "Audio ready · Basic Keys · Pro piano available"
-            : "Audio ready · Basic Keys · follow the GitHub README to enhance the sound"
+            ? "Audio ready · Organ · Piano available"
+            : "Audio ready · Organ · follow the GitHub README to add Piano"
         if (activeAudioBackend === "basic")
           audioProcess.write(JSON.stringify({ type: "character", value: basicCharacter }) + "\n")
+        else if (activeAudioBackend === "keyboard-fluid")
+          audioProcess.write(JSON.stringify({ type: "keyboard_tone", value: keyboardTone }) + "\n")
+        else if (activeAudioBackend === "synth" || activeAudioBackend === "synth-fluid")
+          sendSynthSettings()
         else if (cinematicFactor > 0)
           audioProcess.write(JSON.stringify({ type: "cinematic", value: cinematicFactor }) + "\n")
       } else if (message.type === "error") {
@@ -719,13 +868,24 @@ Panel {
           width: parent.width
           spacing: Style.space(10)
           Column {
-            width: parent.width - headerControls.width - Style.space(10)
-            Text { text: "CHORDPUMPER PROMARCHY"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.title; font.bold: true }
+            width: Math.max(0, parent.width - headerControls.width - Style.space(10))
+            clip: true
             Text {
+              width: parent.width
+              text: "CHORDPUMPER PROMARCHY"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+              elide: Text.ElideRight
+            }
+            Text {
+              width: parent.width
               text: Model.pitchClassLabel(root.keyRoot) + " " + root.scaleTypeName() + " · " + root.scaleLockModeName() + " · " + root.currentStyle.name + " · 110 BPM"
               color: Qt.darker(root.foreground, 1.4)
               font.family: root.fontFamily
               font.pixelSize: Style.font.bodySmall
+              elide: Text.ElideRight
             }
           }
           Row {
@@ -735,36 +895,44 @@ Panel {
             Row {
               spacing: 0
               Button {
-                text: "Basic"
+                text: "Organ"
                 selected: root.activeAudioBackend === "basic"
                 bordered: true
                 foreground: root.foreground
                 fontFamily: root.fontFamily
                 onClicked: root.selectAudioBackend("basic")
               }
+              Text {
+                text: " | "
+                color: root.pianoMuted
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                anchors.verticalCenter: parent.verticalCenter
+              }
               Button {
-                text: "Pro"
+                text: "Keyboard"
+                selected: root.activeAudioBackend === "keyboard-fluid"
+                bordered: true
+                foreground: root.proAudioAvailable ? root.pianoGold : root.pianoMuted
+                fontFamily: root.fontFamily
+                onClicked: root.activateKeyboard()
+              }
+              Button {
+                text: "Piano"
                 selected: root.activeAudioBackend === "fluid"
                 bordered: true
-                foreground: root.proAudioAvailable ? root.foreground : root.pianoMuted
+                foreground: root.proAudioAvailable ? root.pianoGold : root.pianoMuted
                 fontFamily: root.fontFamily
                 onClicked: root.selectAudioBackend("fluid")
               }
-            }
-            Button {
-              text: root.currentStyle.name + "  ▾"
-              bordered: true
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-              onClicked: root.stylePickerOpen = !root.stylePickerOpen
-            }
-            Button {
-              text: "Random"
-              iconText: "⚄"
-              bordered: true
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-              onClicked: { root.randomizeAll(); keyArea.forceActiveFocus() }
+              Button {
+                text: "Synth"
+                selected: root.activeAudioBackend === "synth-fluid"
+                bordered: true
+                foreground: root.proAudioAvailable ? root.pianoGold : root.pianoMuted
+                fontFamily: root.fontFamily
+                onClicked: root.activateProSynth()
+              }
             }
             Text {
               text: "OCT " + root.octave + "  Z/X"
@@ -776,33 +944,13 @@ Panel {
           }
         }
 
-        Grid {
-          visible: root.stylePickerOpen
-          columns: 6
-          spacing: Style.space(5)
-          Repeater {
-            model: root.styles
-            Button {
-              required property var modelData
-              required property int index
-              width: (content.width - Style.space(25)) / 6
-              text: modelData.name
-              selected: root.styleIndex === index
-              bordered: true
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-              fontSize: Style.font.bodySmall
-              onClicked: { root.applyStyle(index); keyArea.forceActiveFocus() }
-            }
-          }
-        }
-
         Row {
           id: scaleLockRow
           width: parent.width
           spacing: Style.space(8)
           Row {
             id: scaleControls
+            visible: !root.synthSelected
             spacing: Style.space(5)
             Text {
             text: "SCALE LOCK"
@@ -848,16 +996,104 @@ Panel {
               }
             }
           }
+          Row {
+            id: synthControls
+            visible: root.synthSelected
+            spacing: Style.space(root.synthControlGap)
+            anchors.verticalCenter: parent.verticalCenter
+            Text {
+              width: Style.space(root.synthMainLabelWidth)
+              text: "SYNTH"
+              color: Qt.darker(root.foreground, 1.35)
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Dropdown {
+              width: Style.space(root.synthVoiceDropdownWidth)
+              showLabel: false
+              value: String(root.currentSynthVoiceIndex())
+              options: root.currentSynthVoiceOptions()
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onChanged: function(value) { root.selectSynthVoice(Number(value)) }
+            }
+            Row {
+              spacing: Style.space(root.synthInnerGap)
+              anchors.verticalCenter: parent.verticalCenter
+              Text {
+                width: Style.space(root.synthParameterLabelWidth)
+                text: (root.synthBank === "pro" ? "RESO " : "SHAPE ") + root.currentSynthShape()
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideRight
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              PanelSlider {
+                bar: root.bar
+                width: Style.space(root.synthParameterSliderWidth)
+                minimum: 0; maximum: 100; step: 1; tickCount: 3
+                value: root.currentSynthShape()
+                onMoved: function(value) { root.setSynthShape(value) }
+              }
+            }
+            Row {
+              spacing: Style.space(root.synthInnerGap)
+              anchors.verticalCenter: parent.verticalCenter
+              Text {
+                width: Style.space(root.synthParameterLabelWidth)
+                text: "SPACE " + root.currentSynthSpace()
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideRight
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              PanelSlider {
+                bar: root.bar
+                width: Style.space(root.synthParameterSliderWidth)
+                minimum: 0; maximum: 100; step: 1; tickCount: 3
+                value: root.currentSynthSpace()
+                onMoved: function(value) { root.setSynthSpace(value) }
+              }
+            }
+            Row {
+              spacing: Style.space(root.synthInnerGap)
+              anchors.verticalCenter: parent.verticalCenter
+              Text {
+                width: Style.space(root.synthParameterLabelWidth)
+                text: "RELEASE " + root.currentSynthRelease()
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideRight
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              PanelSlider {
+                bar: root.bar
+                width: Style.space(root.synthParameterSliderWidth)
+                minimum: 0; maximum: 100; step: 1; tickCount: 3
+                value: root.currentSynthRelease()
+                onMoved: function(value) { root.setSynthRelease(value) }
+              }
+            }
+          }
           Item {
-            width: Math.max(0, parent.width - scaleControls.width - characterControls.width - parent.spacing * 2)
+            width: Math.max(0, parent.width
+              - (root.synthSelected ? synthControls.width : scaleControls.width)
+              - characterControls.width - parent.spacing * 2)
             height: 1
           }
           Row {
             id: characterControls
-            visible: root.activeAudioBackend === "basic" || root.activeAudioBackend === "fluid"
+            visible: root.activeAudioBackend === "basic" || root.activeAudioBackend === "keyboard-fluid"
+              || root.activeAudioBackend === "fluid" || root.synthSelected
             spacing: Style.space(6)
             anchors.verticalCenter: parent.verticalCenter
             Text {
+              width: root.synthSelected ? Style.space(root.synthCutoffShortcutWidth) : implicitWidth
               text: "[ ] ±10"
               color: root.pianoMuted
               font.family: root.fontFamily
@@ -866,12 +1102,15 @@ Panel {
             }
             Text {
               id: soundFactorLabel
-              text: "TONE " + (root.activeAudioBackend === "fluid"
-                ? root.cinematicFactor
-                : root.basicCharacter)
+              width: root.synthSelected ? Style.space(root.synthCutoffLabelWidth) : implicitWidth
+              text: (root.synthSelected ? "CUTOFF " : "TONE ")
+                + (root.activeAudioBackend === "fluid" ? root.cinematicFactor
+                  : root.activeAudioBackend === "keyboard-fluid" ? root.keyboardTone
+                  : root.synthSelected ? root.currentSynthCutoff() : root.basicCharacter)
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
               anchors.verticalCenter: parent.verticalCenter
               TapHandler {
                 acceptedButtons: Qt.RightButton
@@ -881,6 +1120,8 @@ Panel {
                 acceptedButtons: Qt.LeftButton
                 onDoubleTapped: {
                   if (root.activeAudioBackend === "fluid") root.setCinematic(0)
+                  else if (root.activeAudioBackend === "keyboard-fluid") root.setKeyboardTone(60)
+                  else if (root.synthSelected) root.setSynthCutoff(root.currentSynthVoices()[root.currentSynthVoiceIndex()].cutoff)
                   else root.setBasicCharacter(50)
                 }
               }
@@ -888,22 +1129,79 @@ Panel {
             PanelSlider {
               id: characterSlider
               bar: root.bar
-              width: Style.space(125)
+              width: root.synthSelected
+                ? Style.space(root.synthCutoffSliderWidth) : Style.space(125)
               minimum: 0
               maximum: 100
               step: 1
-              value: root.activeAudioBackend === "fluid" ? root.cinematicFactor : root.basicCharacter
+              value: root.activeAudioBackend === "fluid" ? root.cinematicFactor
+                : root.activeAudioBackend === "keyboard-fluid" ? root.keyboardTone
+                : root.synthSelected ? root.currentSynthCutoff() : root.basicCharacter
               tickCount: 3
               onMoved: function(value) {
                 if (root.activeAudioBackend === "fluid") root.setCinematic(value)
+                else if (root.activeAudioBackend === "keyboard-fluid") root.setKeyboardTone(value)
+                else if (root.synthSelected) root.setSynthCutoff(value)
                 else root.setBasicCharacter(value)
               }
               TapHandler {
                 onDoubleTapped: {
                   if (root.activeAudioBackend === "fluid") root.setCinematic(0)
+                  else if (root.activeAudioBackend === "keyboard-fluid") root.setKeyboardTone(60)
+                  else if (root.synthSelected) root.setSynthCutoff(root.currentSynthVoices()[root.currentSynthVoiceIndex()].cutoff)
                   else root.setBasicCharacter(50)
                 }
               }
+            }
+          }
+        }
+
+        Row {
+          id: synthScaleControls
+          visible: root.synthSelected
+          width: parent.width
+          spacing: Style.space(5)
+          Text {
+            text: "SCALE LOCK"
+            color: Qt.darker(root.foreground, 1.35)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            anchors.verticalCenter: parent.verticalCenter
+          }
+          Button {
+            text: Model.pitchClassLabel(root.keyRoot) + "  ▾"
+            selected: root.keyPickerOpen
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: {
+              root.keyPickerOpen = !root.keyPickerOpen
+              if (root.keyPickerOpen) root.scalePickerOpen = false
+            }
+          }
+          Button {
+            text: root.scaleTypeName() + "  ▾"
+            selected: root.scalePickerOpen
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: {
+              root.scalePickerOpen = !root.scalePickerOpen
+              if (root.scalePickerOpen) root.keyPickerOpen = false
+            }
+          }
+          Repeater {
+            model: root.scaleLockModes
+            Button {
+              required property var modelData
+              text: modelData.name
+              selected: root.scaleLockMode === modelData.id
+              bordered: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              onClicked: { root.setScaleLockMode(modelData.id); keyArea.forceActiveFocus() }
             }
           }
         }
@@ -974,7 +1272,7 @@ Panel {
             Repeater {
               model: [
                 { id: "core", name: "Core" }, { id: "alt", name: "Alt" },
-                { id: "colour", name: "Colour" }, { id: "shuffle", name: "Shuffle ↻" }
+                { id: "colour", name: "Colour" }
               ]
               Button {
                 required property var modelData
@@ -986,6 +1284,36 @@ Panel {
                 fontSize: Style.font.caption
                 onClicked: { root.setChordPalette(modelData.id); keyArea.forceActiveFocus() }
               }
+            }
+            Text {
+              text: " · "
+              color: root.pianoMuted
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Dropdown {
+              width: Style.space(92)
+              showLabel: false
+              value: String(root.styleIndex)
+              options: root.styleOptions
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onChanged: function(value) { root.applyStyle(Number(value)); keyArea.forceActiveFocus() }
+            }
+            Button {
+              text: ""
+              iconText: "⚄"
+              tooltipText: "Randomize everything"
+              bordered: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              width: Style.spacing.controlHeight
+              height: Style.spacing.controlHeight
+              horizontalPadding: 0
+              verticalPadding: 0
+              iconSize: Style.font.body
+              onClicked: { root.randomizeAll(); keyArea.forceActiveFocus() }
             }
           }
         }
@@ -1081,8 +1409,7 @@ Panel {
                 anchors.rightMargin: Style.space(4)
                 verticalAlignment: Text.AlignVCenter
                 horizontalAlignment: Text.AlignHCenter
-                text: (index === 9 ? "0" : String(index + 1)) + " · " + Model.chordDisplayName(modelData.root, modelData.quality)
-                elide: Text.ElideRight
+                text: (index === 9 ? "0" : String(index + 1)) + " · " + modelData.roman
                 color: root.activeDegreeIndex === index ? root.pianoSurface : root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
