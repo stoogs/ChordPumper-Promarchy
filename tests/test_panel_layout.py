@@ -21,13 +21,14 @@ class PanelLayoutTests(unittest.TestCase):
         left = (
             self.integer_property("synthMainLabelWidth")
             + self.integer_property("synthVoiceDropdownWidth")
-            + 3
+            + 1
             * (
-                self.integer_property("synthParameterLabelWidth")
+                self.integer_property("synthSpaceShortcutWidth")
+                + self.integer_property("synthParameterLabelWidth")
                 + self.integer_property("synthParameterSliderWidth")
-                + self.integer_property("synthInnerGap")
+                + 2 * self.integer_property("synthInnerGap")
             )
-            + 4 * self.integer_property("synthControlGap")
+            + 2 * self.integer_property("synthControlGap")
         )
         cutoff = (
             self.integer_property("synthCutoffShortcutWidth")
@@ -47,9 +48,46 @@ class PanelLayoutTests(unittest.TestCase):
         self.assertLess(keyboard, piano)
         self.assertLess(piano, synth)
 
+    def test_octave_status_is_in_bottom_action_row(self):
+        octave = self.source.index('id: octaveStatus')
+        status = self.source.index('id: statusLabel')
+        self.assertLess(octave, status)
+        self.assertNotIn('text: "OCT " + root.octave', self.source[:self.source.index('id: octaveStatus')])
+
+    def test_synth_dropdown_geometry_is_fixed(self):
+        dropdown = self.source.index('width: Style.space(root.synthVoiceDropdownWidth)')
+        block = self.source[dropdown:dropdown + 300]
+        self.assertIn('height: Style.spacing.controlHeight', block)
+        self.assertIn('popupRowHeight: Style.spacing.popupRowHeight', block)
+
+    def test_synth_filter_combines_tone_and_resonance(self):
+        self.assertIn('"FILTER "', self.source)
+        self.assertNotIn('"CUTOFF "', self.source)
+        self.assertNotIn('text: (root.synthBank === "pro" ? "RESO "', self.source)
+        self.assertNotIn('text: "RELEASE "', self.source)
+
+    def test_synth_space_keyboard_shortcuts(self):
+        self.assertIn('event.text === "\'"', self.source)
+        self.assertIn('event.text === "\\\\"', self.source)
+        self.assertIn('text: "\'  \\\\  ±10"', self.source)
+
+    def test_reset_sound_is_separate_from_midi_history(self):
+        self.assertIn('function resetSound()', self.source)
+        self.assertIn('text: "Reset Sound"', self.source)
+        self.assertIn('id: clearHistoryButton', self.source)
+        reset = self.source.index('function resetSound()')
+        reset_block = self.source[reset:self.source.index('function selectSynthVoice', reset)]
+        self.assertNotIn('playedEvents', reset_block)
+
     def test_keyboard_uses_fluid_engine(self):
         self.assertIn('function activateKeyboard() { selectAudioBackend("keyboard-fluid") }', self.source)
         self.assertNotIn('Electric Soul', self.source)
+
+    def test_every_optional_instrument_has_install_guidance(self):
+        self.assertEqual(
+            self.source.count('"Optional Pro sound · click for installation instructions"'),
+            3,
+        )
 
     def test_header_text_cannot_overlap_controls(self):
         self.assertIn('width: Math.max(0, parent.width - headerControls.width', self.source)

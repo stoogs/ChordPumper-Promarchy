@@ -189,7 +189,7 @@ class AudioBackendTests(unittest.TestCase):
         self.assertEqual(PRO_SYNTH_PROGRAMS[0][:2], (90, 89))
         self.assertEqual(PRO_SYNTH_PROGRAMS[1][:2], (46, 99))
         self.assertEqual(PRO_SYNTH_PROGRAMS[2][:2], (19, 29))
-        self.assertEqual(PRO_SYNTH_PROGRAMS[4][:2], (56, 57))
+        self.assertEqual(PRO_SYNTH_PROGRAMS[4][:2], (56, 66))
         self.assertEqual(PRO_SYNTH_PROGRAMS[7][:2], (42, 49))
 
     def test_basic_backend_rejects_more_than_32_active_voices(self):

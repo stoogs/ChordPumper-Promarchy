@@ -2,6 +2,19 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## 2.0.0 — 2026-09-09
+
+- Added four clearly separated instruments: zero-setup Organ plus optional FluidSynth Electric Keyboard, Acoustic Piano, and an eight-voice Pro Synth.
+- Added the Analogue Silk, Moon Harp, Iron Cathedral, Aurora Flute, Dirty Trumpet, Velvet Choir, Glass Lead, and Shadow Cello synth voices with contrasting layered programs and preset-specific envelopes.
+- Added draggable Filter and Space macros with expanded response ranges, fixed preset-dropdown geometry, and `[` / `]` filter stepping.
+- Added a layered electric-piano Keyboard with its own Tone control.
+- Reworked the header, genre dropdown, compact random control, chord-function key strip, bottom octave display, and collision-safe responsive labels.
+- Restored octave 2 while retaining octave 3 as the startup default.
+- Added layout regression coverage alongside the audio and MIDI test suite.
+- Added keyboard shortcuts and visible hints for both Filter and Space, plus a sound-only reset that preserves the current MIDI take.
+- Rebalanced Analogue Silk so its expanded Filter sweep changes timbre without collapsing its level, then raised the preset's output by 25%.
+- Refreshed the marketplace preview for the complete v2 interface.
+
 ## 1.7.4 — 2026-09-06
 
 - Removed the large hidden PCM queue from Basic Keys, bringing key response much closer to Pro while retaining PipeWire's stable playback block.

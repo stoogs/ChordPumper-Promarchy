@@ -19,7 +19,7 @@ These files are deliberately deterministic. No remote model, API, or network acc
 
 ## Audio and export engine
 
-`engine/chordpumper_engine.py` uses only the Python standard library. QML invokes the packaged `/usr/bin/python3` path. In Basic mode the engine generates bounded 48 kHz stereo PCM and streams it to Omarchy's validated `/usr/bin/pw-cat`. In Pro mode it validates and starts only the packaged `/usr/bin/fluidsynth` executable with an official root-owned FluidR3 SoundFont. Auto mode prefers Pro when both optional components pass validation and otherwise selects Basic. Both modes accept JSON messages such as:
+`engine/chordpumper_engine.py` uses only the Python standard library. QML invokes the packaged `/usr/bin/python3` path. The zero-setup Organ engine generates bounded 48 kHz stereo PCM and streams it to Omarchy's validated `/usr/bin/pw-cat`. The optional Electric Keyboard, Piano, and layered Synth engines validate and start only the packaged `/usr/bin/fluidsynth` executable with an official root-owned FluidR3 SoundFont. Auto mode prefers Piano when both optional components pass validation and otherwise selects Organ. All engines accept JSON messages such as:
 
 ```json
 {"type":"note_on","note":60,"velocity":104}

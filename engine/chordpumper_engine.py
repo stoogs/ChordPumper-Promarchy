@@ -43,11 +43,11 @@ BASIC_PIPE_BUFFER_BYTES = BASIC_PIPEWIRE_LATENCY_FRAMES * BASIC_CHANNELS * BASIC
 MAX_BASIC_VOICES = 32
 SYNTH_VOICE_COUNT = 6
 PRO_SYNTH_PROGRAMS = (
-    (90, 89, 0.18),  # Polysynth + Warm Pad
+    (90, 89, 0.12),  # Polysynth + Warm Pad
     (46, 99, 0.36),  # Orchestral Harp + Atmosphere
     (19, 29, 0.44),  # Church Organ + Overdriven Guitar
     (73, 94, 0.38),  # Flute + Halo Pad
-    (56, 57, 0.58),  # Trumpet + Trombone
+    (56, 66, 0.45),  # Trumpet + Tenor Sax
     (52, 89, 0.42),  # Choir Aahs + Warm Pad
     (98, 54, 0.40),  # Crystal + Synth Voice
     (42, 49, 0.42),  # Cello + Slow Strings
@@ -756,6 +756,7 @@ def serve_fluid(instrument: str = "fluid") -> int:
         command(f"set synth.chorus.nr {3 + round(width * 2)}")
 
     pro_synth_secondary_gain = PRO_SYNTH_PROGRAMS[0][2]
+    pro_synth_primary_gain = 1.0
     keyboard_secondary_gain = 0.48
 
     def set_keyboard_tone(value: int) -> None:
@@ -773,16 +774,34 @@ def serve_fluid(instrument: str = "fluid") -> int:
         command(f"cc 1 91 {round(44 + amount * 34)}")
         command(f"cc 1 93 {round(36 + amount * 48)}")
 
-    def set_pro_synth(voice: int, cutoff: int, shape: int, space: int, release: int) -> None:
-        nonlocal pro_synth_secondary_gain
-        primary_program, secondary_program, pro_synth_secondary_gain = PRO_SYNTH_PROGRAMS[voice]
+    def set_pro_synth(voice: int, cutoff: int, _shape: int, space: int, release: int) -> None:
+        nonlocal pro_synth_primary_gain, pro_synth_secondary_gain
+        primary_program, secondary_program, base_secondary_gain = PRO_SYNTH_PROGRAMS[voice]
+        preset_gain = 1.25 if voice == 0 else 1.0
+        pro_synth_primary_gain = preset_gain
+        pro_synth_secondary_gain = min(0.85, base_secondary_gain * 1.55 * preset_gain)
         command(f"prog 0 {primary_program}")
         command(f"prog 1 {secondary_program}")
-        brightness = min(127, 8 + round(cutoff * 1.19))
-        resonance = min(127, round(shape * 1.27))
-        reverb = min(127, 14 + round(space * 0.92))
-        chorus = min(127, round(space * 1.05))
-        release_time = min(127, 18 + round(release * 1.02))
+        def expanded(value: int, contrast: float) -> float:
+            return max(0.0, min(1.0, 0.5 + (value / 100.0 - 0.5) * contrast))
+
+        brightness = round(4 + expanded(cutoff, 1.30) * 123)
+        resonance_peak = 1.0 - abs(cutoff - 50) / 50.0
+        resonance = round((0.08 + 0.84 * (resonance_peak ** 1.6)) * 127)
+        space_amount = (space / 100.0) ** 1.35
+        reverb = round(2 + space_amount * 88)
+        chorus = round(space_amount * 24)
+        release_time = round(4 + expanded(release, 1.25) * 123)
+        primary_expression = round(48 + cutoff * 0.79)
+        secondary_expression = round(127 - cutoff * 0.95)
+        command(f"set synth.reverb.room-size {0.08 + space_amount * 0.64:.3f}")
+        command(f"set synth.reverb.damp {0.72 - space_amount * 0.30:.3f}")
+        command(f"set synth.reverb.width {15.0 + space_amount * 60.0:.2f}")
+        command(f"set synth.reverb.level {0.03 + space_amount * 0.52:.3f}")
+        command(f"set synth.chorus.depth {0.5 + space_amount * 2.5:.2f}")
+        command(f"set synth.chorus.level {0.03 + space_amount * 0.15:.3f}")
+        command(f"set synth.chorus.speed {0.14 + space_amount * 0.08:.3f}")
+        command(f"set synth.chorus.nr {2 + round(space_amount)}")
         attack_time = PRO_SYNTH_ATTACKS[voice]
         for channel in (0, 1):
             command(f"cc {channel} 74 {brightness}")
@@ -791,12 +810,24 @@ def serve_fluid(instrument: str = "fluid") -> int:
             command(f"cc {channel} 73 {attack_time}")
             command(f"cc {channel} 91 {reverb}")
             command(f"cc {channel} 93 {chorus}")
+        command(f"cc 0 11 {primary_expression}")
+        command(f"cc 1 11 {secondary_expression}")
         if voice == 0:
             # A quieter warm layer and broad chorus give the polysynth core
-            # an Oberheim-like width without audible pitch competition.
+            # an Oberheim-like width without audible pitch competition. Keep
+            # the primary layer present across the whole filter sweep: the
+            # generic crossfade made this naturally quiet patch sound like a
+            # volume control rather than a timbre control.
+            silk_amount = cutoff / 100.0
+            command(f"cc 0 11 {round(105 + silk_amount * 22)}")
+            command(f"cc 1 11 {round(127 - silk_amount * 65)}")
             command(f"cc 1 74 {max(22, brightness - 8)}")
             command(f"cc 1 71 {max(12, resonance - 6)}")
-            command(f"cc 1 93 {min(127, chorus + 8)}")
+            command(f"cc 0 93 {round(12 + space * 0.28)}")
+            command(f"cc 1 93 {round(18 + space * 0.30)}")
+            command(f"set synth.chorus.depth {0.6 + space * 0.025:.2f}")
+            command(f"set synth.chorus.level {0.03 + space * 0.0015:.3f}")
+            command("set synth.chorus.speed 0.140")
         elif voice == 2:
             # The overdriven-guitar reinforcement should contribute girth,
             # not its piercing pick edge. Keep it darker than the organ as
@@ -804,10 +835,10 @@ def serve_fluid(instrument: str = "fluid") -> int:
             command(f"cc 1 74 {max(18, brightness - 18)}")
             command(f"cc 1 71 {max(12, resonance - 10)}")
         elif voice == 4:
-            # Trombone should thicken the trumpet's lower mids without
-            # doubling its bright edge.
-            command(f"cc 1 74 {max(22, brightness - 10)}")
-            command(f"cc 1 71 {max(12, resonance - 8)}")
+            # Tenor sax adds reed rasp and lower-mid grain without doubling
+            # the trumpet's bright, game-like edge.
+            command(f"cc 1 74 {max(22, brightness - 14)}")
+            command(f"cc 1 71 {max(12, resonance - 6)}")
 
     try:
         if synth.stdin is None or synth.stderr is None:
@@ -843,7 +874,9 @@ def serve_fluid(instrument: str = "fluid") -> int:
                 if kind == "note_on":
                     note = bounded_int(message, "note", 0, 127)
                     velocity = bounded_int(message, "velocity", 1, 127, 100)
-                    command(f"noteon 0 {note} {velocity}")
+                    primary_velocity = min(127, max(1, round(velocity * pro_synth_primary_gain))) \
+                        if instrument == "synth-fluid" else velocity
+                    command(f"noteon 0 {note} {primary_velocity}")
                     if instrument == "synth-fluid":
                         command(f"noteon 1 {note} {max(1, round(velocity * pro_synth_secondary_gain))}")
                     elif instrument == "keyboard-fluid":

@@ -10,11 +10,11 @@ ChordPumper Promarchy is a keyboard-driven chord, harmony, and MIDI sketchpad fo
 omarchy plugin add https://github.com/stoogs/ChordPumper-Promarchy.git --enable
 ```
 
-That is the complete installation. ChordPumper works immediately with its zero-setup **Basic Keys** sound through the PipeWire audio tools already supplied by Omarchy. During installation, Omarchy asks whether the widget belongs in the **left**, **center**, or **right** bar section; **center** is preselected.
+That is the complete installation. ChordPumper works immediately with its zero-setup **Organ** sound through the PipeWire audio tools already supplied by Omarchy. During installation, Omarchy asks whether the widget belongs in the **left**, **center**, or **right** bar section; **center** is preselected.
 
-### Optional Pro piano
+### Optional Pro instruments
 
-For the richer Acoustic Grand Piano sound, install the optional FluidSynth packages:
+For the Electric Keyboard, Acoustic Piano, and eight-voice Pro Synth, install the optional FluidSynth packages:
 
 ```sh
 omarchy pkg add fluidsynth soundfont-fluid
@@ -26,14 +26,14 @@ Restart the Omarchy shell after installation:
 omarchy restart shell
 ```
 
-ChordPumper detects them automatically and starts in **Pro** mode. Use the compact **Basic / Pro** selector in the panel to compare sounds. If Pro is unavailable, the panel points back to these instructions; every other feature, including MIDI export, remains available.
+ChordPumper detects them automatically. Use **Organ | Keyboard Piano Synth** in the panel to switch instruments. If FluidSynth is unavailable, the three gold instrument controls point back to these instructions; Organ, harmony tools, and MIDI export remain available.
 
 ## Features
 
-- Zero-setup Basic Keys synthesis through Omarchy's existing PipeWire tools
-- Automatically detected optional FluidSynth Acoustic Grand Piano
-- In-panel Basic / Pro audio selector
-- One-octave computer-keyboard piano with mouse support
+- Zero-setup Organ synthesis through Omarchy's existing PipeWire tools
+- Automatically detected optional FluidSynth Electric Keyboard, Acoustic Piano, and eight-voice Synth
+- In-panel instrument switching and expressive Tone/Cutoff controls
+- Computer-keyboard piano spanning octaves 2–6 with mouse support
 - 24 musical style palettes
 - Ten playable, style-aware progression chords
 - Eight momentary or lockable chord shapes per style
@@ -71,9 +71,9 @@ Click the compact piano icon in the bar to open the instrument. Hover it to see 
 | Octave down / up | `Z` / `X` |
 | Close panel | `Escape` |
 
-The **Basic / Pro** selector changes audio engines without affecting the current musical settings or MIDI take. Auto-detection selects Pro when the trusted system FluidSynth executable and FluidR3 SoundFont are present; otherwise Basic is selected.
+The instrument selector changes audio engines without affecting the current musical settings or MIDI take. Auto-detection starts with Acoustic Piano when the trusted system FluidSynth executable and FluidR3 SoundFont are present; otherwise Organ is selected.
 
-**Tone** shapes the current engine: Basic becomes cleaner at `0` and more harmonically driven at `100`; Pro adds increasingly cinematic space and width. Use `[` and `]` for 10-point adjustments, or double-click the label or slider to return to its default.
+**Tone** shapes Organ, Electric Keyboard, and Piano. Organ becomes cleaner or more driven, Electric Keyboard moves from warm to tine-forward, and Piano gains cinematic width. Synth exposes two broad macros: **Filter** combines tonal brightness, a resonant midpoint, and a strong crossfade between each preset's two layers; **Space** moves from a nearly dry room to a large but controlled ambience with restrained chorus support. Each preset retains its own designed release tail. Filter is an expressive macro rather than a claim of a literal DSP notch filter. Use `[` and `]` for 10-point Tone/Filter adjustments. While Synth is active, use `'` and `\` for 10-point Space adjustments. Double-click a label or slider to reset it.
 
 ### Style chords
 
@@ -81,16 +81,15 @@ Hold `1` through `9`, or `0` for the tenth slot, to play the ten named progressi
 
 The on-screen chord tiles are non-interactive key legends; use the corresponding physical number key to play each chord.
 
-The number row has four style-aware chord palettes:
+The number row has three selectable style-aware chord palettes:
 
 | Palette | Behaviour |
 | --- | --- |
 | Core | The hand-authored default set for the genre. |
 | Alt | The same harmonic vocabulary in an alternate songwriting order. |
 | Colour | Keeps the style's roots but applies its characteristic extensions and voicings. |
-| Shuffle | Generates another ten-slot palette from that genre's chord roots and chord-shape vocabulary. Click it repeatedly to reshuffle. |
 
-The main **Random** button now selects a style-aware shuffled palette as part of randomizing the whole instrument.
+The dice button selects a style-aware shuffled palette as part of randomizing the whole instrument.
 
 ### Chord shapes
 
@@ -107,7 +106,7 @@ C V B N M , . /
 
 ### Styles
 
-Click the style selector for a 6×4 table, or press `<` to move to the next style.
+Use the style dropdown to choose directly, or press `<` to move to the next style.
 
 Included styles:
 
@@ -159,7 +158,7 @@ The file can be imported into Bitwig, Reaper, Ardour, Ableton Live, Logic, or an
 
 ## How it works
 
-The QML interface runs inside the existing Omarchy shell process. It starts the bundled Python engine as a child process and sends newline-delimited JSON note events over standard input. The engine either synthesizes Basic Keys audio into Omarchy's packaged PipeWire player or controls the optional FluidSynth Pro piano. Its dependency-free MIDI writer exports the played-event history.
+The QML interface runs inside the existing Omarchy shell process. It starts the bundled Python engine as a child process and sends newline-delimited JSON note events over standard input. The engine either synthesizes Organ audio into Omarchy's packaged PipeWire player or controls the optional FluidSynth instruments. Its dependency-free MIDI writer exports the played-event history.
 
 See [Architecture](docs/architecture.md) for the component and security model.
 
