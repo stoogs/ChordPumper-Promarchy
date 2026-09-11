@@ -2,7 +2,7 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
-## Unreleased
+## 2.0.1 — 2026-09-11
 
 - Batch and deduplicate Pro synth settings so slider gestures avoid redundant program changes and intermediate controller values.
 - Skip unused oscillator calculations in Organ without changing its audio output.
