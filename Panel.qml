@@ -114,7 +114,7 @@ Panel {
   property bool cueSoundActive: false
   property int cueSavedSoundFactor: 0
   readonly property string proHelpText: "Want Electric Keyboard, Piano, and Pro Synth sounds? Follow the GitHub instructions to install Omarchy's optional FluidSynth packages."
-  readonly property string proHelpUrl: "https://github.com/stoogs/ChordPumper-Promarchy#optional-pro-piano"
+  readonly property string proHelpUrl: "https://github.com/stoogs/ChordPumper-Promarchy#optional-pro-instruments"
   property int styleIndex: 0
   property string chordPaletteMode: "core"
   property int chordPaletteSeed: 1
@@ -284,6 +284,7 @@ Panel {
     statusText = currentSynthVoices()[currentSynthVoiceIndex()].name + " · release " + next
   }
   function resetSound() {
+    stopCinematicCue()
     if (synthSelected) {
       var preset = currentSynthVoices()[currentSynthVoiceIndex()]
       if (synthBank === "pro") {

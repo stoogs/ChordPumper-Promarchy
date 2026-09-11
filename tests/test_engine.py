@@ -15,6 +15,7 @@ from engine.chordpumper_engine import (
     MAX_EVENTS,
     MAX_EVENTS_JSON_BYTES,
     PRO_SYNTH_PROGRAMS,
+    SynthCommands,
     atomic_write_no_follow,
     midi_bytes,
     parse_events,
@@ -23,6 +24,42 @@ from engine.chordpumper_engine import (
     serve_basic,
     stop_process_group,
 )
+
+
+class SynthCommandTests(unittest.TestCase):
+    def test_batches_final_settings_and_omits_unchanged_gestures(self):
+        stream = mock.Mock()
+        commands = SynthCommands(stream)
+        with commands.batch():
+            commands("prog 0 90")
+            commands("cc 0 74 80")
+            commands("cc 0 74 70")
+        stream.write.assert_called_once_with("prog 0 90\ncc 0 74 70\n")
+        stream.flush.assert_called_once()
+        stream.reset_mock()
+        with commands.batch():
+            commands("prog 0 90")
+            commands("cc 0 74 80")
+            commands("cc 0 74 70")
+        stream.write.assert_not_called()
+
+    def test_repeated_notes_and_all_off_are_never_suppressed(self):
+        stream = io.StringIO()
+        commands = SynthCommands(stream)
+        for _ in range(2):
+            commands("noteon 0 60 100")
+            commands("noteoff 0 60")
+            commands("cc 0 123 0")
+        self.assertEqual(len(stream.getvalue().splitlines()), 6)
+
+    def test_failed_write_does_not_cache_unsent_settings(self):
+        stream = mock.Mock()
+        stream.write.side_effect = [BrokenPipeError(), None]
+        commands = SynthCommands(stream)
+        with self.assertRaises(BrokenPipeError):
+            commands("cc 0 74 60")
+        commands("cc 0 74 60")
+        self.assertEqual(stream.write.call_count, 2)
 
 
 class EventValidationTests(unittest.TestCase):
@@ -156,6 +193,28 @@ class ProcessGroupTests(unittest.TestCase):
 
 
 class AudioBackendTests(unittest.TestCase):
+    def test_basic_shutdown_when_player_never_reads_audio(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            executable = Path(temporary_directory) / "stalled-player"
+            executable.write_text("#!/usr/bin/python3\nimport time\ntime.sleep(60)\n")
+            executable.chmod(0o700)
+            driver = (
+                "import time\n"
+                "from engine import chordpumper_engine as e\n"
+                f"e.trusted_pw_cat = lambda: {str(executable)!r}\n"
+                "def quit_after_pipe_fills():\n"
+                "    time.sleep(0.2)\n"
+                "    return {'type': 'quit'}\n"
+                "e.read_control_line = quit_after_pipe_fills\n"
+                "e.serve_basic(False)\n"
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", driver], capture_output=True,
+                text=True, timeout=10,
+                cwd=Path(__file__).resolve().parents[1],
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_auto_prefers_pro_when_available(self):
         with (
             mock.patch("engine.chordpumper_engine.pro_audio_available", return_value=True),

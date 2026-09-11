@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from array import array
 from collections import deque
+from contextlib import contextmanager
 import fcntl
 import json
 import math
@@ -53,6 +54,45 @@ PRO_SYNTH_PROGRAMS = (
     (42, 49, 0.42),  # Cello + Slow Strings
 )
 PRO_SYNTH_ATTACKS = (30, 12, 26, 42, 30, 48, 18, 58)
+
+
+class SynthCommands:
+    """Coalesce settings per gesture, while always delivering note events."""
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.settings = {}
+        self.pending = None
+
+    def __call__(self, value: str) -> None:
+        parts = value.split()
+        key = tuple(parts[:-1]) if parts[0] in {"set", "prog"} or (
+            parts[0] == "cc" and int(parts[2]) < 120
+        ) else None
+        if self.pending is not None:
+            self.pending[key if key is not None else object()] = value
+            return
+        self._write([(key, value)])
+
+    def _write(self, entries) -> None:
+        changed = [(key, value) for key, value in entries
+                   if key is None or self.settings.get(key) != value]
+        if not changed:
+            return
+        self.stream.write("".join(value + "\n" for _, value in changed))
+        self.stream.flush()
+        for key, value in changed:
+            if isinstance(key, tuple):
+                self.settings[key] = value
+
+    @contextmanager
+    def batch(self):
+        self.pending = {}
+        try:
+            yield
+            self._write(self.pending.items())
+        finally:
+            self.pending = None
 
 def variable_length(value: int) -> bytes:
     buffer = value & 0x7F
@@ -341,7 +381,12 @@ def stop_process_group(
                 stderr_thread.join(timeout=1.0)
         for stream in (process.stdin, process.stdout, process.stderr):
             if stream is not None and not stream.closed:
-                stream.close()
+                try:
+                    stream.close()
+                except BrokenPipeError:
+                    # Expected when a stopped player could not consume the
+                    # remaining buffered audio/control data before exit.
+                    pass
         if stderr_thread is not None and stderr_thread.is_alive():
             raise RuntimeError(f"{process_name} diagnostic drain did not stop")
 
@@ -555,8 +600,9 @@ def serve_basic(pro_available: bool, instrument: str = "basic") -> int:
                                 tone = tone * (1.0 - upper_warmth) + rounded_tone * upper_warmth
                         mixed += tone * attack * release * float(voice["velocity"]) * float(voice["level"])
                         voice["phase"] = (phase + float(voice["phase_step"])) % (2.0 * math.pi)
-                        voice["phase_two"] = (float(voice["phase_two"]) + float(voice["phase_step"]) * 1.006) % (2.0 * math.pi)
-                        voice["sub_phase"] = (float(voice["sub_phase"]) + float(voice["phase_step"]) * 0.5) % (2.0 * math.pi)
+                        if instrument == "synth":
+                            voice["phase_two"] = (float(voice["phase_two"]) + float(voice["phase_step"]) * 1.006) % (2.0 * math.pi)
+                            voice["sub_phase"] = (float(voice["sub_phase"]) + float(voice["phase_step"]) * 0.5) % (2.0 * math.pi)
                         voice["age"] = age + 1.0
                         if bool(voice["released"]):
                             release *= float(voice["release_rate"])
@@ -602,6 +648,10 @@ def serve_basic(pro_available: bool, instrument: str = "basic") -> int:
         writer_stop.set()
         if writer_thread is not None:
             writer_thread.join(timeout=1.0)
+            # Closing a BufferedWriter while its writer is blocked can wait
+            # forever for its lock. Let group termination unblock it first.
+            if writer_thread.is_alive():
+                return
         if player.stdin is not None and not player.stdin.closed:
             player.stdin.close()
 
@@ -721,11 +771,7 @@ def serve_fluid(instrument: str = "fluid") -> int:
     def request_shutdown(signum, _frame) -> None:
         raise SystemExit(128 + signum)
 
-    def command(value: str) -> None:
-        if synth.stdin is None:
-            raise RuntimeError("could not open FluidSynth control channel")
-        synth.stdin.write(value + "\n")
-        synth.stdin.flush()
+    command = SynthCommands(synth.stdin)
 
     def graceful_stop() -> None:
         if synth.stdin is None:
@@ -898,7 +944,8 @@ def serve_fluid(instrument: str = "fluid") -> int:
                     shape = bounded_int(message, "shape", 0, 100)
                     space = bounded_int(message, "space", 0, 100)
                     release = bounded_int(message, "release", 0, 100)
-                    set_pro_synth(voice, cutoff, shape, space, release)
+                    with command.batch():
+                        set_pro_synth(voice, cutoff, shape, space, release)
                 elif kind == "all_off":
                     command("cc 0 123 0")
                     command("cc 1 123 0")

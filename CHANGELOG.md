@@ -2,6 +2,13 @@
 
 All notable changes to ChordPumper Promarchy are documented here.
 
+## Unreleased
+
+- Batch and deduplicate Pro synth settings so slider gestures avoid redundant program changes and intermediate controller values.
+- Skip unused oscillator calculations in Organ without changing its audio output.
+- Allow supervised shutdown to terminate a stalled PipeWire player without blocking on the audio writer's pipe lock.
+- Fix the optional-instrument help link and stop the demo before restoring sound defaults.
+
 ## 2.0.0 — 2026-09-09
 
 - Added four clearly separated instruments: zero-setup Organ plus optional FluidSynth Electric Keyboard, Acoustic Piano, and an eight-voice Pro Synth.
